@@ -33,9 +33,9 @@ int main(int argc, char *argv[])
     {
         if (!(line[0] == '#'))
         {
-            printf("%s", line);
+            printf("line: %s\n", line);
             printf("\n");
-            sscanf(line, "%d %d %d %d", &arr[size].id, &arr[size].arrivaltime, &arr[size].runningtime, &arr[size].priority);
+            sscanf(line, "%d   %d   %d   %d", &arr[size].id, &arr[size].arrivaltime, &arr[size].runningtime, &arr[size].priority);
             arr[size].finishtime = -1;
             size = size + 1;
         }
@@ -81,10 +81,10 @@ int main(int argc, char *argv[])
         printf("current time is %d\n", x);
 
         printf("sadasda");
-        mkfifo("myfifo", 0666);
+        mkfifo("ff", 0666);
         printf("2sadasda");
         fflush(stdout);
-        int open_pipe = open("myfifo", O_WRONLY);
+        int open_pipe = open("ff", O_WRONLY);
         printf("fghf %d", open_pipe);
         fflush(stdout);
         if (open_pipe < 0)
@@ -96,17 +96,27 @@ int main(int argc, char *argv[])
         }
 
         write(open_pipe, &size, sizeof(size));
-        for (size_t i = 0; i < size; i++)
-        {
-            while (getClk() >= arr[i].arrivaltime)
-            {
-                // TODO
-                // 5) sending the arr[i] to the shceduler DONE
-                printf("writing");
+        int i = 0;
+        while (i < size) {
+            if (getClk() >= arr[i].arrivaltime) {
+                printf("writing\n");
                 fflush(stdout);
+                printf("arrvals: %d %d\n", arr[0].arrivaltime, arr[0].id);
                 write(open_pipe, &arr[i], sizeof(arr[i]));
+                i++;
             }
         }
+        // for (size_t i = 0; i < size; i++)
+        // {
+        //     while (getClk() >= arr[i].arrivaltime)
+        //     {
+        //         // TODO
+        //         // 5) sending the arr[i] to the shceduler DONE
+        //         printf("writing");
+        //         fflush(stdout);
+        //         write(open_pipe, &arr[i], sizeof(arr[i]));
+        //     }
+        // }
         close(open_pipe);
         execl("./scheduler.out", "./scheduler.out", NULL);
     }
