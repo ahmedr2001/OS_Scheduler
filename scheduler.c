@@ -6,17 +6,24 @@
 struct processData
 {
     int arrivaltime;
+    int startingTime;
     int priority;
     int runningtime;
     int id;
     int finishtime;
-};
+} typedef processData;
 struct processData *data;
 struct processData x;
 int size=0;
+
+int HPF(int time);
+processData SRTN(int time);
+processData RR(int time);
+
 int main(int argc, char * argv[])
 {
     initClk();
+    HPF(0);
     printf("sched \n");
     fflush(stdout);
     // mkfifo("myfifo.txt", 0666);
@@ -33,6 +40,7 @@ int main(int argc, char * argv[])
     }
     printf("size: %d\n", size);
     data = (struct processData*) malloc(size * sizeof(struct processData));
+    printf("zero id: %d\n", data[0].id);
     int i=0;
     while(read(open_pipe, &x, sizeof(x)) > 0) 
     {
@@ -51,4 +59,35 @@ int main(int argc, char * argv[])
     //upon termination release the clock resources.
     
     destroyClk(true);
+}
+
+// Highest Priority First Algorithm
+int HPF(int time)
+{
+    int scheduledProcessIndex = -1;
+    bool occupied = 0;
+    int max_priority = 11;
+    for (int i = 0; i < size; i++) {
+        if (data[i].id != 0) {
+            int st_time = data[i].startingTime;
+            int end_time = st_time + data[i].runningtime;
+            if (st_time <= time && time <= end_time) {   // Non-preemptive algorithm
+                occupied = 1;
+                scheduledProcessIndex = i;
+                break;
+            }
+            // Schedule the highest priority process (lowest value)
+            if (data[i].priority < max_priority) {  
+                max_priority = data[i].priority;
+                scheduledProcessIndex = i;
+            }
+        }
+    }
+    if (!occupied) {
+        data[scheduledProcessIndex].startingTime = time;
+        
+        data[scheduledProcessIndex].finishtime = time 
+            + data[scheduledProcessIndex].runningtime;
+    }
+    return scheduledProcessIndex;
 }
