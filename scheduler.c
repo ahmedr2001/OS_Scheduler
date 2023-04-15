@@ -17,10 +17,11 @@ processData process_default = {-1,-1,-1,-1,-1,-1,-1};
 struct processData *data;
 struct processData x;
 int size=0;
+int quantum;
 
 int HPF(int time);
 int SRTN(int time);
-processData RR(int time);
+int RR(int time, int previousProcessIndex);
 
 int main(int argc, char * argv[])
 {
@@ -106,6 +107,27 @@ int SRTN(int time)
                 scheduledProcessIndex = i;
             }
         }
+    }
+
+    return scheduledProcessIndex;
+}
+
+// Round-Robin Algorithm
+int RR(int time, int previousProcessIndex)
+{
+    int scheduledProcessIndex = previousProcessIndex;
+    if (time % quantum == 0) {
+        int i = previousProcessIndex + 1;
+        i %= size;
+        while (true) {
+            if (data[i].id != -1) {
+                break;
+            }
+            i++;
+            i %= size;
+        }
+
+        scheduledProcessIndex = i;
     }
 
     return scheduledProcessIndex;
