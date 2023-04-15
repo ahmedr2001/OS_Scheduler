@@ -9,21 +9,23 @@ struct processData
     int startingTime;
     int priority;
     int runningtime;
+    int remainingTime;
     int id;
     int finishtime;
 } typedef processData;
+processData process_default = {-1,-1,-1,-1,-1,-1,-1};
 struct processData *data;
 struct processData x;
 int size=0;
 
 int HPF(int time);
-processData SRTN(int time);
+int SRTN(int time);
 processData RR(int time);
 
 int main(int argc, char * argv[])
 {
     initClk();
-    HPF(0);
+    x = process_default;
     printf("sched \n");
     fflush(stdout);
     // mkfifo("myfifo.txt", 0666);
@@ -40,6 +42,7 @@ int main(int argc, char * argv[])
     }
     printf("size: %d\n", size);
     data = (struct processData*) malloc(size * sizeof(struct processData));
+    data[0]=process_default;
     printf("zero id: %d\n", data[0].id);
     int i=0;
     while(read(open_pipe, &x, sizeof(x)) > 0) 
@@ -57,7 +60,6 @@ int main(int argc, char * argv[])
     fflush(stdout);
     //TODO implement the scheduler :)
     //upon termination release the clock resources.
-    
     destroyClk(true);
 }
 
@@ -68,7 +70,7 @@ int HPF(int time)
     bool occupied = 0;
     int max_priority = 11;
     for (int i = 0; i < size; i++) {
-        if (data[i].id != 0) {
+        if (data[i].id != -1) {
             int st_time = data[i].startingTime;
             int end_time = st_time + data[i].runningtime;
             if (st_time <= time && time <= end_time) {   // Non-preemptive algorithm
@@ -83,11 +85,28 @@ int HPF(int time)
             }
         }
     }
-    if (!occupied) {
+    if (!occupied && scheduledProcessIndex != -1) {
         data[scheduledProcessIndex].startingTime = time;
         
         data[scheduledProcessIndex].finishtime = time 
             + data[scheduledProcessIndex].runningtime;
     }
+    return scheduledProcessIndex;
+}
+
+// Shortest Remaining Time Next Algorithm
+int SRTN(int time)
+{
+    int scheduledProcessIndex = -1;
+    int min_rt = 1e9;
+    for (int i = 0; i < size; i++) {
+        if (data[i].id != -1) {
+            if (data[i].remainingTime < min_rt) {
+                min_rt = data[i].remainingTime;
+                scheduledProcessIndex = i;
+            }
+        }
+    }
+
     return scheduledProcessIndex;
 }
