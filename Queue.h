@@ -70,6 +70,11 @@ struct process dequeue(struct Queue *q)
     q->Front = q->Front->Next;
     free(temp);
     q->count = q->count - 1;
+    if(q->count == 0)
+    {
+        temp = q->Rear;
+        free(temp);
+    }
     return tempProcess;
 }
 struct process* findID(struct Queue *q,int id)
@@ -85,5 +90,15 @@ struct process* findID(struct Queue *q,int id)
         temp = temp->Next;
     }
     return NULL;
+}
+void printQ(struct Queue *q)
+{
+    struct Node *temp;
+    temp = q->Front;
+      while (temp)
+    {
+        printf("id: %d \n",temp->process.id);
+        temp = temp->Next;
+    }
 }
 #endif

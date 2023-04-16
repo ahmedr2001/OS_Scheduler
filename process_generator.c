@@ -11,6 +11,7 @@ char line[100];
 
 int shmid;
 void clearResources(int);
+mqd_t msgq_id;
 int main(int argc, char *argv[])
 {
     int n_of_algo = 1;
@@ -41,7 +42,7 @@ int main(int argc, char *argv[])
     // 3. Initiate and create the scheduler and clock processes. DONE
     // 4. Use this function after creating the clock process to initialize clock. DONE
     //----------------------------- make the message queue---------------
-    mqd_t msgq_id = msgget(8, 0666 | IPC_CREAT);
+    msgq_id = msgget(8, 0666 | IPC_CREAT);
     if (msgq_id == -1)
     {
         perror("Error in creating message queue.");
@@ -51,6 +52,7 @@ int main(int argc, char *argv[])
     //     perror("msgctl");
     //     return 1;
     // }
+    // return 0;
 
     //-----------------------------
     printf("Enter the number of the algo, 1 for HPF, 2 for SHRF, 3 for RR: \n");
@@ -99,7 +101,7 @@ int main(int argc, char *argv[])
     printf("current time is %d\n", x);
     while (!isQueueEmpty(Q))
     {
-        if(getClk() >= Q->Front->process.arrivaltime)
+        while(getClk() >= Q->Front->process.arrivaltime)
         {
             printf("xix ");
             struct process tempo;
@@ -107,20 +109,21 @@ int main(int argc, char *argv[])
             struct process_message wal;
             wal.process = tempo;
             wal.mtype = 1;
-            int check = msgsnd(msgq_id, &wal, sizeof(wal.process), !IPC_NOWAIT);
+            int check = msgsnd(msgq_id, &wal, sizeof(wal.process), IPC_NOWAIT);
             if (check == -1)
             {
                 perror("ERROR in sending \n");
             }
         }
     }
-    // while (1)
-    //  {
-    //  }
+
+    while (1)
+    {
+        sleep(1);
+    }
+    
 
     destroyClk(true);
-    //msgctl(msgq_id, IPC_RMID, NULL);
-    //clearResources(0);
     return 0;
 }
 
@@ -129,9 +132,9 @@ void clearResources(int signum)
     // TODO Clears all resources in case of interruption
     // destroyClk(1);
     printf("Cleearing the Resources. \n");
-    // msgctl(msgq_id,IPC_RMID,0);
+    msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
-    destroyClk(true);
+    // destroyClk(true);
     // Exit the program
     exit(signum);
 }

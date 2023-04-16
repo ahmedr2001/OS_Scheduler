@@ -7,36 +7,57 @@
 #include <stdio.h>
 #include<mqueue.h>
 #include<string.h>
+void clearResources(int s);
 int size;
+int n_algo;
+int slice=0;
+mqd_t mq;
 int main(int argc, char * argv[])
 {
+    signal(SIGINT, clearResources);
     struct Queue *ready = createQueue();
-    int n_algo = atoi(argv[1]);
-    int slice = 0;
+    n_algo = atoi(argv[1]);
     if(n_algo == 3)
     {
         slice = atoi(argv[2]);
     }
-    mqd_t mq = msgget(8, 0666 | IPC_CREAT);
-    struct process rec;
-    struct process_message mes_rec;
-    while (1)
+   mq = msgget(8, 0666 | IPC_CREAT);
+    if (mq == -1)
     {
-        if(msgrcv(mq, &mes_rec,sizeof(rec), 0, !IPC_NOWAIT)==-1)
+        perror("Error in openning message queue.");
+        exit(-1);
+    }
+    struct process_message mes_rec;
+    int x=0;
+    sleep(2);
+    while (x<1001)
+    {
+        struct process rec;
+        if(msgrcv(mq, &mes_rec,sizeof(mes_rec.process), 1, IPC_NOWAIT) == -1)
         {
-            perror("Error in receive ");
+            perror("ERROR in reciever: ");
+            //printf("sadasadad\n");
         }
         else
-        {
+        {   rec = mes_rec.process;
+            enqueue(ready,&rec);
             printf("%d",mes_rec.process.id);
-            break;
         }
+        x++;
     }
-    
     //TODO implement the scheduler :)
     //upon termination release the clock resources.
-    
     destroyClk(true);
+    return 0;
+}
+void clearResources(int signum)
+{
+    printf("Cleearing the Resources. \n");
+    msgctl(mq,IPC_RMID,0);
+    // Destroy the clock
+    //destroyClk(true);
+    // Exit the program
+    exit(signum);
 }
 // int HPF(int time)
 // {
