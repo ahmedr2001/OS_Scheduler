@@ -42,7 +42,8 @@ int main(int argc, char *argv[])
     // 3. Initiate and create the scheduler and clock processes. DONE
     // 4. Use this function after creating the clock process to initialize clock. DONE
     //----------------------------- make the message queue---------------
-    msgq_id = msgget(8, 0666 | IPC_CREAT);
+    key_t msgq_k = ftok("key.txt", 17);
+    int msgq_id = msgget(msgq_k, 0666 | IPC_CREAT);
     if (msgq_id == -1)
     {
         perror("Error in creating message queue.");
@@ -79,6 +80,7 @@ int main(int argc, char *argv[])
         execl("./clk.out", "./clk.out", NULL); // execute the clock process
         exit(0);
     }
+    initClk();
     pid_t pid1 = fork();
     if (pid1 == -1)
     {
@@ -91,7 +93,6 @@ int main(int argc, char *argv[])
         execl("./scheduler.out", "./scheduler.out", string_algo, string_slice, NULL);
         exit(0);
     }
-    initClk();
     signal(SIGINT, clearResources); // in case of CTRL + c interrupt
                                     // TODO Generation Main Loop
                                     // 6. Create a data structure for processes and provide it with its parameters. DONE
@@ -99,9 +100,11 @@ int main(int argc, char *argv[])
                                     // 8. Clear clock resources
     int x = getClk();
     printf("current time is %d\n", x);
+    printf("Q size: %d\n",Q->count);
     while (!isQueueEmpty(Q))
     {
-        while(getClk() >= Q->Front->process.arrivaltime)
+        puts("here");
+        if(getClk() >= Q->Front->process.arrivaltime)
         {
             printf("xix ");
             struct process tempo;
@@ -109,21 +112,24 @@ int main(int argc, char *argv[])
             struct process_message wal;
             wal.process = tempo;
             wal.mtype = 1;
-            int check = msgsnd(msgq_id, &wal, sizeof(wal.process), IPC_NOWAIT);
+            int check = msgsnd(msgq_id, &wal, sizeof(wal.process), !IPC_NOWAIT);
+            int d;
+            msgrcv(msgq_id, &wal,sizeof(wal.process),0,!IPC_NOWAIT);
+            printf("D:%d\n",wal.process.id);
+            printf("ID: %d\n", wal.process.id);
             if (check == -1)
             {
                 perror("ERROR in sending \n");
             }
         }
-    }
-
-    while (1)
-    {
         sleep(1);
     }
+
     
 
     destroyClk(true);
+    msgctl(msgq_id, IPC_RMID, (struct msqid_ds *)NULL);
+    //clearResources(0);
     return 0;
 }
 
