@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <stdio.h>
 char line[100];
-int n_of_algo;
+int n_of_algo = 1;
 int size = 0;
 int capacity = 1;
 struct processData
