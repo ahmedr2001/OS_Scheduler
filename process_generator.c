@@ -1,26 +1,21 @@
 #include "headers.h"
+#include "Queue.h"
+#include "types.h"
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <mqueue.h>
+#include <string.h>
 char line[100];
-int n_of_algo = 1;
-int size = 0;
-int capacity = 1;
-struct processData
-{
-    int arrivaltime;
-    int priority;
-    int runningtime;
-    int id;
-    int finishtime;
-};
-struct processData *arr;
+
 int shmid;
 void clearResources(int);
-
 int main(int argc, char *argv[])
 {
+    int n_of_algo = 1;
+    int slice = 2;
+    struct Queue *Q = createQueue();
 
     FILE *input_file = fopen("input test.txt", "r");
     if (!input_file)
@@ -28,26 +23,14 @@ int main(int argc, char *argv[])
         printf("Error opening file\n");
         return 1;
     }
-    arr = (struct processData *)malloc(capacity * sizeof(struct processData));
     while (fgets(line, sizeof(line), input_file) != NULL)
     {
         if (!(line[0] == '#'))
         {
-            printf("line: %s\n", line);
-            printf("\n");
-            sscanf(line, "%d   %d   %d   %d", &arr[size].id, &arr[size].arrivaltime, &arr[size].runningtime, &arr[size].priority);
-            arr[size].finishtime = -1;
-            size = size + 1;
-        }
-        if (size == capacity)
-        {
-            capacity *= 2;
-            arr = (struct processData *)realloc(arr, capacity * sizeof(struct processData));
-            if (arr == NULL)
-            {
-                printf("Memory reallocation failed\n");
-                return 1;
-            }
+            struct process temp;
+            printf("%s \n", line);
+            sscanf(line, "%d %d %d %d", &temp.id, &temp.arrivaltime, &temp.runningtime, &temp.priority);
+            enqueue(Q, &temp);
         }
     }
     fclose(input_file);
@@ -57,6 +40,32 @@ int main(int argc, char *argv[])
     // 2. Ask the user for the chosen scheduling algorithm and its parameters, if there are any. DONE
     // 3. Initiate and create the scheduler and clock processes. DONE
     // 4. Use this function after creating the clock process to initialize clock. DONE
+    //----------------------------- make the message queue---------------
+    mqd_t msgq_id = msgget(8, 0666 | IPC_CREAT);
+    if (msgq_id == -1)
+    {
+        perror("Error in creating message queue.");
+        exit(-1);
+    }
+    //  if (msgctl(msgq_id, IPC_RMID, NULL) == -1) {
+    //     perror("msgctl");
+    //     return 1;
+    // }
+
+    //-----------------------------
+    printf("Enter the number of the algo, 1 for HPF, 2 for SHRF, 3 for RR: \n");
+    scanf("%d", &n_of_algo);
+    printf("%d \n",n_of_algo);
+    char string_algo[10];
+    sprintf(string_algo, "%d", n_of_algo);
+    if (n_of_algo == 3)
+    {
+        printf("Enter the Quantum: \n");
+        scanf("%d", &slice);
+    }
+    char string_slice[10];
+    sprintf(string_slice, "%d", slice);
+
     pid_t pid = fork();
     if (pid == -1)
     {
@@ -66,79 +75,61 @@ int main(int argc, char *argv[])
     else if (pid == 0)
     {
         execl("./clk.out", "./clk.out", NULL); // execute the clock process
-        perror("Error in execl clk.out!");
+        exit(0);
+    }
+    pid_t pid1 = fork();
+    if (pid1 == -1)
+    {
+        perror("Error in fork!");
         exit(-1);
     }
-    else
+    if (pid1 == 0)
     {
-        initClk();
-        signal(SIGINT, clearResources); // in case of CTRL + c interrupt
-        printf("Enter the algo number : 1, 2, 3 \n");
-        scanf("%d", &n_of_algo);
-        printf("%d \n", n_of_algo);
-        int x = getClk();
-        // int x = 4;
-        printf("current time is %d\n", x);
 
-        printf("sadasda");
-        mkfifo("ff", 0666);
-        printf("2sadasda");
-        fflush(stdout);
-        int open_pipe = open("ff", O_WRONLY);
-        printf("fghf %d", open_pipe);
-        fflush(stdout);
-        if (open_pipe < 0)
+        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice, NULL);
+        exit(0);
+    }
+    initClk();
+    signal(SIGINT, clearResources); // in case of CTRL + c interrupt
+                                    // TODO Generation Main Loop
+                                    // 6. Create a data structure for processes and provide it with its parameters. DONE
+                                    // 7. Send the information to the scheduler at the appropriate time. DONE
+                                    // 8. Clear clock resources
+    int x = getClk();
+    printf("current time is %d\n", x);
+    while (!isQueueEmpty(Q))
+    {
+        if(getClk() >= Q->Front->process.arrivaltime)
         {
-            printf("3sadasd");
-            fflush(stdout);
-            perror("Error opening myfifio pipe");
-            exit(1);
-        }
-
-        write(open_pipe, &size, sizeof(size));
-        int i = 0;
-        while (i < size) {
-            if (getClk() >= arr[i].arrivaltime) {
-                printf("writing\n");
-                fflush(stdout);
-                printf("arrvals: %d %d\n", arr[0].arrivaltime, arr[0].id);
-                write(open_pipe, &arr[i], sizeof(arr[i]));
-                i++;
+            printf("xix ");
+            struct process tempo;
+            tempo = dequeue(Q);
+            struct process_message wal;
+            wal.process = tempo;
+            wal.mtype = 1;
+            int check = msgsnd(msgq_id, &wal, sizeof(wal.process), !IPC_NOWAIT);
+            if (check == -1)
+            {
+                perror("ERROR in sending \n");
             }
         }
-        // for (size_t i = 0; i < size; i++)
-        // {
-        //     while (getClk() >= arr[i].arrivaltime)
-        //     {
-        //         // TODO
-        //         // 5) sending the arr[i] to the shceduler DONE
-        //         printf("writing");
-        //         fflush(stdout);
-        //         write(open_pipe, &arr[i], sizeof(arr[i]));
-        //     }
-        // }
-        close(open_pipe);
-        execl("./scheduler.out", "./scheduler.out", NULL);
     }
-    // return 0;
+    // while (1)
+    //  {
+    //  }
 
-    // TODO Generation Main Loop
-    // 6. Create a data structure for processes and provide it with its parameters. DONE
-    // 7. Send the information to the scheduler at the appropriate time. DONE
-    // 8. Clear clock resources
     destroyClk(true);
-    clearResources(0);
+    //msgctl(msgq_id, IPC_RMID, NULL);
+    //clearResources(0);
+    return 0;
 }
 
 void clearResources(int signum)
 {
     // TODO Clears all resources in case of interruption
     // destroyClk(1);
-    shmdt(arr);
-    // Deallocate the shared memory segment
-    shmctl(shmid, IPC_RMID, NULL);
-    // Destroy the semaphore
-    // semctl(semid, 0, IPC_RMID);
+    printf("Cleearing the Resources. \n");
+    // msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
     destroyClk(true);
     // Exit the program
