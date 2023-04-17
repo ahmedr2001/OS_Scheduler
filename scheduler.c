@@ -62,70 +62,79 @@ void clearResources_sched(int signum)
     // Exit the program
     exit(signum);
 }
-// int HPF(int time)
-// {
-//     int scheduledProcessIndex = -1;
-//     bool occupied = 0;
-//     int max_priority = 11;
-//     for (int i = 0; i < size; i++) {
-//         if (data[i].id != -1) {
-//             int st_time = data[i].startingTime;
-//             int end_time = st_time + data[i].runningtime;
-//             if (st_time <= time && time <= end_time) {   // Non-preemptive algorithm
-//                 occupied = 1;
-//                 scheduledProcessIndex = i;
-//                 break;
-//             }
-//             // Schedule the highest priority process (lowest value)
-//             if (data[i].priority < max_priority) {  
-//                 max_priority = data[i].priority;
-//                 scheduledProcessIndex = i;
-//             }
-//         }
-//     }
-//     if (!occupied && scheduledProcessIndex != -1) {
-//         data[scheduledProcessIndex].startingTime = time;
+
+struct process* HPF(int time, struct Queue *ready)
+{
+    struct process *scheduledProcess = NULL;
+    int scheduledProcessID = -1;
+    bool occupied = 0;
+    int max_priority = 11;
+    struct Node *root = ready->Front;
+    while (root) {
+        int st_time = root->process.startingTime;
+        int end_time = st_time + root->process.runningtime;
+        if (st_time <= time && time <= end_time) {   // Non-preemptive algorithm
+            occupied = 1;
+            scheduledProcessID = root->process.id;
+            break;
+        }
+        // Schedule the highest priority process (lowest value)
+        if (root->process.priority < max_priority) {  
+            max_priority = root->process.priority;
+            scheduledProcessID = root->process.id;
+        }
+        root = root->Next;
+    }
+
+    struct Node *processNode;
+    processNode = findID(ready, scheduledProcessID);
+    scheduledProcess = &processNode->process;
+    if (!occupied && scheduledProcess) {
+        scheduledProcess->startingTime = time;
         
-//         data[scheduledProcessIndex].finishtime = time 
-//             + data[scheduledProcessIndex].runningtime;
-//     }
-//     return scheduledProcessIndex;
-// }
+        scheduledProcess->finishTime = time 
+            + scheduledProcess->runningtime;
+    }
 
-// // Shortest Remaining Time Next Algorithm
-// int SRTN(int time)
-// {
-//     int scheduledProcessIndex = -1;
-//     int min_rt = 1e9;
-//     for (int i = 0; i < size; i++) {
-//         if (data[i].id != -1) {
-//             if (data[i].remainingTime < min_rt) {
-//                 min_rt = data[i].remainingTime;
-//                 scheduledProcessIndex = i;
-//             }
-//         }
-//     }
+    return scheduledProcess;
+}
 
-//     return scheduledProcessIndex;
-// }
+// Shortest Remaining Time Next Algorithm
+struct process* SRTN(int time, struct Queue *ready)
+{
+    struct process *scheduledProcess = NULL;
+    int scheduledProcessID = -1;
+    int min_rt = 1e9;
+    struct Node *root = ready->Front;
+    while (root) {
+        if (root->process.remainingTime < min_rt) {
+            min_rt = root->process.remainingTime;
+            scheduledProcessID = root->process.id;
+        }
+        root = root->Next;
+    }
 
-// // Round-Robin Algorithm
-// int RR(int time, int previousProcessIndex)
-// {
-//     int scheduledProcessIndex = previousProcessIndex;
-//     if (time % quantum == 0) {
-//         int i = previousProcessIndex + 1;
-//         i %= size;
-//         while (true) {
-//             if (data[i].id != -1) {
-//                 break;
-//             }
-//             i++;
-//             i %= size;
-//         }
+    struct Node *processNode;
+    processNode = findID(ready, scheduledProcessID);
+    scheduledProcess = &processNode->process;
+    return scheduledProcess;
+}
 
-//         scheduledProcessIndex = i;
-//     }
+// Round-Robin Algorithm
+struct process* RR(int time, int curProcessID, struct Queue *ready)
+{
+    struct process *scheduledProcess = NULL;
+    struct Node *curProcessNode = findID(ready, curProcessID);
+    struct Node *front = ready->Front;
+    struct Node *rear = ready->Rear;
+    rear->Next = front;
+    if (time % slice == 0) {
+        do {
+            curProcessNode = curProcessNode->Next;
+        } while (curProcessNode == NULL);
+    }
 
-//     return scheduledProcessIndex;
-// }
+    scheduledProcess = &curProcessNode->process;
+    return scheduledProcess;
+}
+
