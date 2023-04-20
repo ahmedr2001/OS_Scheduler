@@ -61,8 +61,6 @@ int main(int argc, char *argv[])
     }
     char string_slice[10];
     sprintf(string_slice,"%d" ,slice);
-    initClk();
-    signal(SIGINT, clearResources); 
     pid_t pid = fork();
     if (pid == -1)
     {
@@ -72,8 +70,9 @@ int main(int argc, char *argv[])
     else if (pid == 0)
     {
         execl("./clk.out", "./clk.out", NULL); // execute the clock process
-        exit(0);
     }
+    initClk();
+    signal(SIGINT, clearResources); 
     pid_t pid1 = fork();
     if (pid1 == -1)
     {
@@ -83,7 +82,6 @@ int main(int argc, char *argv[])
     if (pid1 == 0)
     {
         execl("./scheduler.out", "./scheduler.out", string_algo, string_slice, NULL);
-        exit(0);
     }
     int x = getClk();
     printf("current time is %d\n", x);
@@ -104,8 +102,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    sleep(2);    
-    destroyClk(true);
+    sleep(30);    
     return 0;
 }
 
@@ -115,6 +112,6 @@ void clearResources(int signum)
     printf("Cleearing the Resources. \n");
     msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
-    // destroyClk(true);
+    destroyClk(true);
     exit(signum);
 }

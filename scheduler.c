@@ -15,14 +15,15 @@ int slice=0;
 mqd_t msgq_id;
 int main(int argc, char * argv[])
 {
-    signal(SIGINT, clearResources);
     initClk();
+    signal(SIGINT, clearResources);
     struct Queue *ready = createQueue();
     n_algo = atoi(argv[1]);
     if(n_algo == 3)
     {
         slice = atoi(argv[2]);
     }
+    printf("algorithm number: %d , slice:  %d \n",n_algo,slice);
    msgq_id = msgget(7, 0666 | IPC_CREAT);
     if (msgq_id == -1)
     {
@@ -31,23 +32,26 @@ int main(int argc, char * argv[])
     }
     struct process_message mes_rec;
     int x=0;
-    while (1)
+    while (x<2)
     {
         struct process rec;
-        if(msgrcv(msgq_id, &mes_rec,sizeof(mes_rec.process), 1, IPC_NOWAIT) == -1)
+        if(msgrcv(msgq_id, &mes_rec,sizeof(mes_rec.process), 0, IPC_NOWAIT) == -1)
         {
-            perror("ERROR in reciever: ");
+            perror("ERROR in reciever:");
         }
         else
         {
-            printf("%d",mes_rec.process.id);
-            break;
+            enqueue(ready,&mes_rec.process);
+            //printf("%d",mes_rec.process.id);
+            x++;
+            //break;
         }
     }
     //TODO implement the scheduler :)
     //upon termination release the clock resources.
-    //destroyClk(true);
-    printf("Breaked!! \n");
+    printQ(ready);
+    printf("\nBreaked!! \n");
+    clearResources(1);
     return 0;
 }
 void clearResources(int signum)
@@ -55,7 +59,7 @@ void clearResources(int signum)
     printf("Cleearing the Resources. \n");
     msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
-    //destroyClk(true);
+    destroyClk(true);
     // Exit the program
     exit(signum);
 }
