@@ -70,14 +70,14 @@ struct process dequeue(struct Queue *q)
     q->Front = q->Front->Next;
     free(temp);
     q->count = q->count - 1;
-    if(q->count == 0)
-    {
-        temp = q->Rear;
-        free(temp);
-    }
+    // if(q->count == 0)
+    // {
+    //     temp = q->Rear;
+    //     free(temp);
+    // }
     return tempProcess;
 }
-struct Node* findID(struct Queue *q,int id)
+struct process* findID(struct Queue *q,int id)
 {
     struct Node *temp;
     temp = q->Front;
@@ -85,7 +85,7 @@ struct Node* findID(struct Queue *q,int id)
     {
         if(temp->process.id == id)
         {
-            return temp;
+            return &temp->process;
         }
         temp = temp->Next;
     }
