@@ -95,10 +95,67 @@ void printQ(struct Queue *q)
 {
     struct Node *temp;
     temp = q->Front;
+    int x = 0;
       while (temp)
     {
-        printf("id: %d \n",temp->process.id);
+        x++;
+        printf("id %d : %d \n",x,temp->process.id);
         temp = temp->Next;
     }
 }
+void swap(struct Node *a, struct Node *b) {
+    struct process temp = a->process;
+    a->process = b->process;
+    b->process = temp;
+}
+
+struct Node* partition(struct Node *start, struct Node *end) {
+    struct process *pivot = &end->process;
+    struct Node *pIndex = start;
+
+    for (struct Node *i = start; i != end; i = i->Next) {
+        if (i->process.priority < pivot->priority) {
+            swap(pIndex, i);
+            pIndex = pIndex->Next;
+        }
+    }
+
+    swap(pIndex, end);
+    return pIndex;
+}
+
+void quickSort(struct Node *start, struct Node *end) {
+    if (start == end || start == NULL || end == NULL)
+        return;
+
+    struct Node *pIndex = partition(start, end);
+    quickSort(start, pIndex);
+    quickSort(pIndex->Next, end);
+}
+
+void sortQueueByPriorityQuick(struct Queue *q) {
+    if (q == NULL || q->Front == NULL || q->Rear == NULL || q->Front == q->Rear)
+        return;
+
+    quickSort(q->Front, q->Rear);
+}
+
+void sortQueueByPriorityBubble(struct Queue *q) {
+    int i, j, size = q->count;
+    struct Node *temp1, *temp2;
+    struct process tempProcess;
+    for (i = 0; i < size - 1; i++) {
+        temp1 = q->Front;
+        for (j = 0; j < size - i - 1; j++) {
+            temp2 = temp1->Next;
+            if (temp1->process.priority > temp2->process.priority) {
+                tempProcess = temp1->process;
+                temp1->process = temp2->process;
+                temp2->process = tempProcess;
+            }
+            temp1 = temp1->Next;
+        }
+    }
+}
+
 #endif

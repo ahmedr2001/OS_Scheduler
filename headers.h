@@ -27,6 +27,7 @@ int * shmaddr;                 //
 
 int getClk()
 {
+    sleep(5);
     return *shmaddr;
 }
 
@@ -60,9 +61,9 @@ void initClk()
 void destroyClk(bool terminateAll)
 {
     shmdt(shmaddr);
-    if (terminateAll)
-    {
-        killpg(getpgrp(), SIGINT);
-    }
+    // if (terminateAll)
+    // {
+    //     killpg(getpgrp(), SIGINT);
+    // }
 }
 ////

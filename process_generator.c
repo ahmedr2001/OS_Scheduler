@@ -15,8 +15,9 @@ int main(int argc, char *argv[])
 {
     int n_of_algo = 1;
     int slice = 2;
+    int n_processes = 0;
     struct Queue *Q = createQueue();
-
+//--------------Reading processes from the FILE----------------------------
     FILE *input_file = fopen("input test.txt", "r");
     if (!input_file)
     {
@@ -26,7 +27,8 @@ int main(int argc, char *argv[])
     while (fgets(line, sizeof(line), input_file) != NULL)
     {
         if (!(line[0] == '#'))
-        {
+        { 
+            n_processes++;
             struct process temp;
             printf("%s \n", line);
             sscanf(line, "%d %d %d %d", &temp.id, &temp.arrivaltime, &temp.runningtime, &temp.priority);
@@ -34,8 +36,7 @@ int main(int argc, char *argv[])
         }
     }
     fclose(input_file);
-    signal(SIGINT, clearResources);
-    //----------------------------- make the message queue---------------
+    //----------------------------- create the message queue---------------
     msgq_id = msgget(7, 0666 | IPC_CREAT);
     if (msgq_id == -1)
     {
@@ -49,6 +50,7 @@ int main(int argc, char *argv[])
     // return 0;
 
     //-----------------------------
+    signal(SIGINT, clearResources);
     printf("Enter the number of the algo, 1 for HPF, 2 for SHRF, 3 for RR: \n");
     scanf("%d", &n_of_algo);
     printf("%d \n",n_of_algo);
@@ -60,7 +62,9 @@ int main(int argc, char *argv[])
         scanf("%d", &slice);
     }
     char string_slice[10];
+    char string_n_processes[10];
     sprintf(string_slice,"%d" ,slice);
+    sprintf(string_n_processes,"%d" ,n_processes);
     pid_t pid = fork();
     if (pid == -1)
     {
@@ -72,7 +76,8 @@ int main(int argc, char *argv[])
         execl("./clk.out", "./clk.out", NULL); // execute the clock process
     }
     initClk();
-    signal(SIGINT, clearResources); 
+    int x = getClk();
+    printf("current time is %d\n", x);
     pid_t pid1 = fork();
     if (pid1 == -1)
     {
@@ -81,35 +86,33 @@ int main(int argc, char *argv[])
     }
     if (pid1 == 0)
     {
-        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice, NULL);
+        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
     }
-    int x = getClk();
-    printf("current time is %d\n", x);
     while (!isQueueEmpty(Q))
     {
         while(getClk() >= Q->Front->process.arrivaltime)
         {
-            printf("xix ");
             struct process tempo;
             tempo = dequeue(Q);
-            struct process_message mes_rec;
-            mes_rec.process = tempo;
-            mes_rec.mtype = 1;
-            int check = msgsnd(msgq_id, &mes_rec, sizeof(mes_rec.process), IPC_NOWAIT);
+            struct process_message mes_send;
+            mes_send.process = tempo;
+            mes_send.mtype = 1;
+            int check = msgsnd(msgq_id, &mes_send, sizeof(mes_send.process), !IPC_NOWAIT);
             if (check == -1)
             {
                 perror("ERROR in sending \n");
             }
         }
     }
-    sleep(30);    
+    sleep(50);    
+    destroyClk(true);
     return 0;
 }
 
 void clearResources(int signum)
 {
     // TODO Clears all resources in case of interruption
-    printf("Cleearing the Resources. \n");
+    printf("Cleearing the Resources FROM process generator. \n");
     msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
     destroyClk(true);
