@@ -95,6 +95,11 @@ void printQ(struct Queue *q)
 {
     struct Node *temp;
     temp = q->Front;
+    if(!temp)
+    {
+        printf("Empty Queue.\n");
+        return;
+    }
     int x = 0;
       while (temp)
     {
@@ -102,6 +107,7 @@ void printQ(struct Queue *q)
         printf("id %d : %d \n",x,temp->process.id);
         temp = temp->Next;
     }
+    return;
 }
 void swap(struct Node *a, struct Node *b) {
     struct process temp = a->process;
@@ -156,6 +162,53 @@ void sortQueueByPriorityBubble(struct Queue *q) {
             temp1 = temp1->Next;
         }
     }
+}
+void insertPrioQueue(struct Queue *q, struct process *p) {
+    struct Node *newNode = createNode();
+    newNode->process = *p;
+    newNode->Next = NULL;
+
+    if (isQueueEmpty(q)) {
+        q->Front = q->Rear = newNode;
+        q->count++;
+        return;
+    }
+
+    if (p->priority > q->Front->process.priority) {
+        newNode->Next = q->Front;
+        q->Front = newNode;
+        q->count++;
+        return;
+    }
+
+    struct Node *current = q->Front;
+    struct Node *prev = NULL;
+
+    // binary search for the position to insert the new node
+    int low = 0;
+    int high = q->count - 1;
+    int mid = (low + high) / 2;
+    while (low <= high) {
+        for (int i = 0; i < mid; i++) {
+            current = current->Next;
+        }
+        if (p->priority > current->process.priority) {
+            high = mid - 1;
+        } else {
+            low = mid + 1;
+        }
+        prev = current;
+        current = q->Front;
+        mid = (low + high) / 2;
+    }
+
+    // insert the new node
+    newNode->Next = prev->Next;
+    prev->Next = newNode;
+    if (newNode->Next == NULL) {
+        q->Rear = newNode;
+    }
+    q->count++;
 }
 
 #endif

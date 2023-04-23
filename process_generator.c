@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <mqueue.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/msg.h>
 char line[100];
 int shmid;
 void clearResources(int);
@@ -30,12 +32,13 @@ int main(int argc, char *argv[])
         { 
             n_processes++;
             struct process temp;
-            printf("%s \n", line);
+            printf("%s", line);
             sscanf(line, "%d %d %d %d", &temp.id, &temp.arrivaltime, &temp.runningtime, &temp.priority);
             enqueue(Q, &temp);
         }
     }
     fclose(input_file);
+    printf("\n");
     //----------------------------- create the message queue---------------
     msgq_id = msgget(7, 0666 | IPC_CREAT);
     if (msgq_id == -1)
@@ -48,7 +51,6 @@ int main(int argc, char *argv[])
     //     return 1;
     // }
     // return 0;
-
     //-----------------------------
     signal(SIGINT, clearResources);
     printf("Enter the number of the algo, 1 for HPF, 2 for SHRF, 3 for RR: \n");
@@ -68,12 +70,12 @@ int main(int argc, char *argv[])
     pid_t pid = fork();
     if (pid == -1)
     {
-        perror("Error in fork!");
-        exit(-1);
+       perror("Error in fork!");
+       exit(-1);
     }
     else if (pid == 0)
     {
-        execl("./clk.out", "./clk.out", NULL); // execute the clock process
+       execl("./clk.out", "./clk.out", NULL); // execute the clock process
     }
     initClk();
     int x = getClk();
@@ -81,17 +83,19 @@ int main(int argc, char *argv[])
     pid_t pid1 = fork();
     if (pid1 == -1)
     {
-        perror("Error in fork!");
-        exit(-1);
+       perror("Error in fork!");
+       exit(-1);
     }
     if (pid1 == 0)
     {
-        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
+       execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
     }
+    int v = 0;
     while (!isQueueEmpty(Q))
     {
-        while(getClk() >= Q->Front->process.arrivaltime)
+        if(getClk() >= Q->Front->process.arrivaltime)
         {
+            v++;
             struct process tempo;
             tempo = dequeue(Q);
             struct process_message mes_send;
@@ -100,11 +104,11 @@ int main(int argc, char *argv[])
             int check = msgsnd(msgq_id, &mes_send, sizeof(mes_send.process), !IPC_NOWAIT);
             if (check == -1)
             {
-                perror("ERROR in sending \n");
+                perror("ERROR in sending ");
             }
         }
     }
-    sleep(50);    
+    sleep(120);    
     destroyClk(true);
     return 0;
 }

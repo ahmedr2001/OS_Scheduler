@@ -37,23 +37,19 @@ int main(int argc, char * argv[])
     while (size<n_processes)
     {
         struct process rec;
-        if(msgrcv(msgq_id, &mes_rec,sizeof(mes_rec.process), 0, IPC_NOWAIT) == -1)
+        if(msgrcv(msgq_id, &mes_rec,sizeof(mes_rec.process), 0, !IPC_NOWAIT) == -1)
         {
-            //perror("ERROR in reciever:");
+            perror("ERROR in reciever:");
         }
         else
         {
             enqueue(ready,&mes_rec.process);
-            //printf("%d",mes_rec.process.id);
             size++;
-            //break;
         }
     }
-    //TODO implement the scheduler :)
-    //upon termination release the clock resources.
-    printQ(ready);
-    printf("Breaked!! \n");
-    // sleep(1);
+    //TODO implement the SRT algorithm
+
+    sleep(1);
     destroyClk(true);
     return 0;
 }
