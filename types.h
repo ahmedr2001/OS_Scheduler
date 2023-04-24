@@ -5,21 +5,28 @@ typedef struct process
     int arrivaltime;
     int priority;
     int runningtime;
-    int startingTime;
-    int finishTime;
-    int remainingTime;
     int id;
-}process;
-typedef struct PCB
+} process;
+typedef struct NodePCB
 {
     struct process process;
-    int status; //0 for waiting, 1 for running
+    int spri;
+    int status; // 0 for waiting, 1 for running
+    int starting_time;
     int waiting_time;
     int remaining_time;
-}PCB;
+    int finish_time;
+    struct NodePCB *Next;
+} NodePCB;
+typedef struct PCB
+{
+    int count;
+    struct NodePCB *Front;
+    struct NodePCB *Rear;
+} PCB;
 typedef struct process_message
 {
     struct process process;
     long mtype;
-}process_message;
+} process_message;
 #endif

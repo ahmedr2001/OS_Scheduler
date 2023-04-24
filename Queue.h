@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include"types.h"
+#include "types.h"
 
 typedef struct Node
 {
     struct process process;
+    int spri;
     struct Node *Next;
 } Node;
 
@@ -77,15 +78,15 @@ struct process dequeue(struct Queue *q)
     // }
     return tempProcess;
 }
-struct Node* findID(struct Queue *q,int id)
+struct process *findID(struct Queue *q, int id)
 {
     struct Node *temp;
     temp = q->Front;
     while (temp)
     {
-        if(temp->process.id == id)
+        if (temp->process.id == id)
         {
-            return temp;
+            return &temp->process;
         }
         temp = temp->Next;
     }
@@ -95,32 +96,36 @@ void printQ(struct Queue *q)
 {
     struct Node *temp;
     temp = q->Front;
-    if(!temp)
+    if (!temp)
     {
         printf("Empty Queue.\n");
         return;
     }
     int x = 0;
-      while (temp)
+    while (temp)
     {
         x++;
-        printf("id %d : %d \n",x,temp->process.id);
+        printf("id %d : %d \n", x, temp->process.id);
         temp = temp->Next;
     }
     return;
 }
-void swap(struct Node *a, struct Node *b) {
+void swap(struct Node *a, struct Node *b)
+{
     struct process temp = a->process;
     a->process = b->process;
     b->process = temp;
 }
 
-struct Node* partition(struct Node *start, struct Node *end) {
+struct Node *partition(struct Node *start, struct Node *end)
+{
     struct process *pivot = &end->process;
     struct Node *pIndex = start;
 
-    for (struct Node *i = start; i != end; i = i->Next) {
-        if (i->process.priority < pivot->priority) {
+    for (struct Node *i = start; i != end; i = i->Next)
+    {
+        if (i->process.priority < pivot->priority)
+        {
             swap(pIndex, i);
             pIndex = pIndex->Next;
         }
@@ -130,7 +135,8 @@ struct Node* partition(struct Node *start, struct Node *end) {
     return pIndex;
 }
 
-void quickSort(struct Node *start, struct Node *end) {
+void quickSort(struct Node *start, struct Node *end)
+{
     if (start == end || start == NULL || end == NULL)
         return;
 
@@ -139,22 +145,27 @@ void quickSort(struct Node *start, struct Node *end) {
     quickSort(pIndex->Next, end);
 }
 
-void sortQueueByPriorityQuick(struct Queue *q) {
+void sortQueueByPriorityQuick(struct Queue *q)
+{
     if (q == NULL || q->Front == NULL || q->Rear == NULL || q->Front == q->Rear)
         return;
 
     quickSort(q->Front, q->Rear);
 }
 
-void sortQueueByPriorityBubble(struct Queue *q) {
+void sortQueueByPriorityBubble(struct Queue *q)
+{
     int i, j, size = q->count;
     struct Node *temp1, *temp2;
     struct process tempProcess;
-    for (i = 0; i < size - 1; i++) {
+    for (i = 0; i < size - 1; i++)
+    {
         temp1 = q->Front;
-        for (j = 0; j < size - i - 1; j++) {
+        for (j = 0; j < size - i - 1; j++)
+        {
             temp2 = temp1->Next;
-            if (temp1->process.priority > temp2->process.priority) {
+            if (temp1->process.priority > temp2->process.priority)
+            {
                 tempProcess = temp1->process;
                 temp1->process = temp2->process;
                 temp2->process = tempProcess;
@@ -163,52 +174,49 @@ void sortQueueByPriorityBubble(struct Queue *q) {
         }
     }
 }
-void insertPrioQueue(struct Queue *q, struct process *p) {
+void insertPrioQueue(struct Queue *q, struct process *p, int pri)
+{
     struct Node *newNode = createNode();
+    newNode->spri = pri;
     newNode->process = *p;
     newNode->Next = NULL;
 
-    if (isQueueEmpty(q)) {
+    if (isQueueEmpty(q))
+    {
         q->Front = q->Rear = newNode;
         q->count++;
         return;
     }
 
-    if (p->priority > q->Front->process.priority) {
+    if (pri < q->Front->spri)
+    {
         newNode->Next = q->Front;
         q->Front = newNode;
         q->count++;
         return;
     }
-
+    if (pri >= q->Rear->spri)
+    {
+        q->Rear->Next = newNode;
+        q->Rear = newNode;
+        q->count++;
+        return;
+    }
     struct Node *current = q->Front;
     struct Node *prev = NULL;
-
-    // binary search for the position to insert the new node
-    int low = 0;
-    int high = q->count - 1;
-    int mid = (low + high) / 2;
-    while (low <= high) {
-        for (int i = 0; i < mid; i++) {
-            current = current->Next;
-        }
-        if (p->priority > current->process.priority) {
-            high = mid - 1;
-        } else {
-            low = mid + 1;
+    for (size_t i = 0; i < q->count; i++)
+    {
+        if (pri < current->spri)
+        {
+            prev->Next = newNode;
+            newNode->Next = current;
+            q->count++;
+            break;
         }
         prev = current;
-        current = q->Front;
-        mid = (low + high) / 2;
+        current = current->Next;
     }
-
-    // insert the new node
-    newNode->Next = prev->Next;
-    prev->Next = newNode;
-    if (newNode->Next == NULL) {
-        q->Rear = newNode;
-    }
-    q->count++;
+    return;
 }
 
 #endif

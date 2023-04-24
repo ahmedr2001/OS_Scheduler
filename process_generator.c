@@ -1,13 +1,13 @@
 #include "headers.h"
 #include "Queue.h"
 #include "types.h"
+#include"PCB.h"
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <mqueue.h>
 #include <string.h>
-#include <limits.h>
 #include <sys/msg.h>
 char line[100];
 int shmid;
@@ -90,12 +90,10 @@ int main(int argc, char *argv[])
     {
        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
     }
-    int v = 0;
     while (!isQueueEmpty(Q))
     {
         if(getClk() >= Q->Front->process.arrivaltime)
         {
-            v++;
             struct process tempo;
             tempo = dequeue(Q);
             struct process_message mes_send;
@@ -109,7 +107,7 @@ int main(int argc, char *argv[])
         }
     }
     sleep(120);    
-    destroyClk(true);
+    //destroyClk(true);
     return 0;
 }
 
@@ -119,6 +117,7 @@ void clearResources(int signum)
     printf("Cleearing the Resources FROM process generator. \n");
     msgctl(msgq_id,IPC_RMID,0);
     // Destroy the clock
+    shmctl(shmid, IPC_RMID, NULL);
     destroyClk(true);
     exit(signum);
 }

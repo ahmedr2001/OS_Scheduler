@@ -11,7 +11,7 @@ int main(int agrc, char * argv[])
     //remainingtime = ??;
     while (remainingtime > 0)
     {
-        remainingtime = getClk();
+        //??
     }
     
     destroyClk(false);

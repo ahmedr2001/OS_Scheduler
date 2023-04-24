@@ -1,54 +1,84 @@
 #include "headers.h"
 #include "Queue.h"
-#include"types.h"
+#include "types.h"
+#include "PCB.h"
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <mqueue.h>
+#include <string.h>
 #include <stdio.h>
-#include<mqueue.h>
-#include<string.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 void clearResources_sched(int s);
+void HPF();
 int shmid;
 int size;
 int n_algo;
-int slice=0;
-int size=0;
+int slice = 0;
+int size = 0;
 int n_processes = 0;
 mqd_t msgq_id;
-int main(int argc, char * argv[])
+mqd_t msg_id_processes;
+struct PCB *pcb;
+struct Queue *ready;
+int main(int argc, char *argv[])
 {
     initClk();
     signal(SIGINT, clearResources_sched);
-    struct Queue *ready = createQueue();
+    ready = createQueue();
+    pcb = creatPCB();
     n_algo = atoi(argv[1]);
-    if(n_algo == 3)
+    if (n_algo == 3)
     {
         slice = atoi(argv[2]);
     }
     n_processes = atoi(argv[3]);
-    printf("algorithm number: %d , slice: %d , n_processes: %d \n",n_algo,slice,n_processes);
-   msgq_id = msgget(7, 0666 | IPC_CREAT);
+    printf("algorithm number: %d , slice: %d , n_processes: %d \n", n_algo, slice, n_processes);
+    msgq_id = msgget(7, 0666 | IPC_CREAT);
     if (msgq_id == -1)
     {
         perror("Error in openning message queue.");
         exit(-1);
     }
+    msg_id_processes = msgget(10, 0666 | IPC_CREAT);
+    if (msg_id_processes == -1)
+    {
+        perror("Error in openning message queue (msg_id_processes).");
+        exit(-1);
+    }
     struct process_message mes_rec;
-    while (size<n_processes)
+    int once = 1;
+    while (size < n_processes)
     {
         struct process rec;
-        if(msgrcv(msgq_id, &mes_rec,sizeof(mes_rec.process), 0, !IPC_NOWAIT) == -1)
+        if (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, !IPC_NOWAIT) == -1)
         {
-            perror("ERROR in reciever:");
+            perror("Error in rec:");
         }
         else
         {
-            enqueue(ready,&mes_rec.process);
+            switch (n_algo)
+            {
+            case 1:
+                insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
+                break;
+            case 2:
+                insertPrioQueue(ready, &mes_rec.process, mes_rec.process.runningtime);
+                break;
+            case 3:
+                enqueue(ready, &mes_rec.process);
+                break;
+            default:
+                printf("Error in n_algo \n");
+                break;
+            }
             size++;
         }
     }
-    //TODO implement the SRT algorithm
-
+    // HPF();
+    // printPCB(pcb);
     sleep(1);
     destroyClk(true);
     return 0;
@@ -56,85 +86,79 @@ int main(int argc, char * argv[])
 void clearResources_sched(int signum)
 {
     printf("Cleearing the Resources from scheduler. \n");
-    msgctl(msgq_id,IPC_RMID,0);
+    msgctl(msgq_id, IPC_RMID, 0);
+    msgctl(msg_id_processes, IPC_RMID, 0);
+    shmctl(shmid, IPC_RMID, NULL);
     // Destroy the clock
-    //destroyClk(true);
+    // destroyClk(true);
     // Exit the program
     exit(signum);
 }
 
-struct process* HPF(int time, struct Queue *ready)
+void HPF()
 {
-    struct process *scheduledProcess = NULL;
-    int scheduledProcessID = -1;
-    bool occupied = 0;
-    int max_priority = 11;
-    struct Node *root = ready->Front;
-    while (root) {
-        int st_time = root->process.startingTime;
-        int end_time = st_time + root->process.runningtime;
-        if (st_time <= time && time <= end_time) {   // Non-preemptive algorithm
-            occupied = 1;
-            scheduledProcessID = root->process.id;
-            break;
+    printPCB(pcb);
+    printf("\n");
+    struct process current;
+    while (!isQueueEmpty(ready))
+    {
+        struct NodePCB *info_processs = creatNodePCB();
+        current = dequeue(ready);
+        info_processs->process = current;
+        info_processs->starting_time = getClk();
+        info_processs->status = 1;
+        info_processs->spri = -1;
+        info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
+        info_processs->remaining_time = -1;
+        info_processs->finish_time = -1;
+        insertPCB(pcb,info_processs);
+        while (getClk() < (current.runningtime + info_processs->starting_time))
+        {
         }
-        // Schedule the highest priority process (lowest value)
-        if (root->process.priority < max_priority) {  
-            max_priority = root->process.priority;
-            scheduledProcessID = root->process.id;
+        if(getClk() == (current.runningtime + info_processs->starting_time))
+        {
+            info_processs->finish_time = getClk();
         }
-        root = root->Next;
+        update_node_PCB(pcb,info_processs);
     }
-
-    struct Node *processNode;
-    processNode = findID(ready, scheduledProcessID);
-    scheduledProcess = &processNode->process;
-    if (!occupied && scheduledProcess) {
-        scheduledProcess->startingTime = time;
-        
-        scheduledProcess->finishTime = time 
-            + scheduledProcess->runningtime;
-    }
-
-    return scheduledProcess;
+    return ;
 }
 
-// Shortest Remaining Time Next Algorithm
-struct process* SRTN(int time, struct Queue *ready)
-{
-    struct process *scheduledProcess = NULL;
-    int scheduledProcessID = -1;
-    int min_rt = 1e9;
-    struct Node *root = ready->Front;
-    while (root) {
-        if (root->process.remainingTime < min_rt) {
-            min_rt = root->process.remainingTime;
-            scheduledProcessID = root->process.id;
-        }
-        root = root->Next;
-    }
 
-    struct Node *processNode;
-    processNode = findID(ready, scheduledProcessID);
-    scheduledProcess = &processNode->process;
-    return scheduledProcess;
-}
+// // Shortest Remaining Time Next Algorithm
+// int SRTN(int time)
+// {
+//     int scheduledProcessIndex = -1;
+//     int min_rt = 1e9;
+//     for (int i = 0; i < size; i++) {
+//         if (data[i].id != -1) {
+//             if (data[i].remainingTime < min_rt) {
+//                 min_rt = data[i].remainingTime;
+//                 scheduledProcessIndex = i;
+//             }
+//         }
+//     }
 
-// Round-Robin Algorithm
-struct process* RR(int time, int curProcessID, struct Queue *ready)
-{
-    struct process *scheduledProcess = NULL;
-    struct Node *curProcessNode = findID(ready, curProcessID);
-    struct Node *front = ready->Front;
-    struct Node *rear = ready->Rear;
-    rear->Next = front;
-    if (time % slice == 0) {
-        do {
-            curProcessNode = curProcessNode->Next;
-        } while (curProcessNode == NULL);
-    }
+//     return scheduledProcessIndex;
+// }
 
-    scheduledProcess = &curProcessNode->process;
-    return scheduledProcess;
-}
+// // Round-Robin Algorithm
+// int RR(int time, int previousProcessIndex)
+// {
+//     int scheduledProcessIndex = previousProcessIndex;
+//     if (time % quantum == 0) {
+//         int i = previousProcessIndex + 1;
+//         i %= size;
+//         while (true) {
+//             if (data[i].id != -1) {
+//                 break;
+//             }
+//             i++;
+//             i %= size;
+//         }
 
+//         scheduledProcessIndex = i;
+//     }
+
+//     return scheduledProcessIndex;
+// }
