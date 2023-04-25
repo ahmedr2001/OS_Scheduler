@@ -39,29 +39,31 @@ void write_the_state()
         printf("Error in openning scheduler.log file: \n");
         return;
     }
-    // char x[] = {};
-    // switch (info_processs->status)
-    // {
-    // case 0:
-    //     /* code */
-    //     break;
-    // case 1:
-    //     break;
-    // case 2:
-    //     break;
-    // default:
-    //     break;
-    // }
+    char* x;
+    switch (info_processs->status)
+    {
+    case 0:
+        x = "blocked";
+        break;
+    case 1:
+        x = "started";
+        break;
+    case 2:
+        x = "stopped";
+        break;
+    default:
+        break;
+    }
     if (info_processs->status != 2) // finished
     {
-        fprintf(logfile, "At time %d process %d %d arr %d total %d remain %d wait %d", getClk(),
-                info_processs->process.id, info_processs->status, info_processs->process.arrivaltime,
+        fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d", getClk(),
+                info_processs->process.id, x, info_processs->process.arrivaltime,
                 info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time);
     }
     else
     {
-        fprintf(logfile, "At time %d process %d %d arr %d total %d remain %d wait %d TA %d WA %f", getClk(),
-                info_processs->process.id, info_processs->status, info_processs->process.arrivaltime,
+        fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d TA %d WA %f", getClk(),
+                info_processs->process.id, x, info_processs->process.arrivaltime,
                 info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time,
                 info_processs->turnaround_time, (info_processs->turnaround_time / (double)info_processs->process.runningtime) * 100 / 100.0f);
     }
@@ -146,6 +148,7 @@ void handler(int signum)
         info_processs->turnaround_time = info_processs->finish_time - info_processs->process.arrivaltime;
         update_node_PCB(pcb, info_processs);
         signal(SIGUSR2, handler);
+        //write_the_state();
         break;
     }
 }
