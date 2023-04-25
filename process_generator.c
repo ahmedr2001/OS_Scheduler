@@ -32,13 +32,12 @@ int main(int argc, char *argv[])
         { 
             n_processes++;
             struct process temp;
-            printf("%s", line);
+            //printf("%s", line);
             sscanf(line, "%d %d %d %d", &temp.id, &temp.arrivaltime, &temp.runningtime, &temp.priority);
             enqueue(Q, &temp);
         }
     }
     fclose(input_file);
-    printf("\n");
     //----------------------------- create the message queue---------------
     msgq_id = msgget(7, 0666 | IPC_CREAT);
     if (msgq_id == -1)
@@ -53,7 +52,7 @@ int main(int argc, char *argv[])
     // return 0;
     //-----------------------------
     signal(SIGINT, clearResources);
-    printf("Enter the number of the algo, 1 for HPF, 2 for SHRF, 3 for RR: \n");
+    printf("Enter the number of the algo, 1 for HPF, 2 for SRTN, 3 for RR: \n");
     scanf("%d", &n_of_algo);
     printf("%d \n",n_of_algo);
     char string_algo[10];
@@ -89,6 +88,7 @@ int main(int argc, char *argv[])
     if (pid1 == 0)
     {
        execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
+       exit(0);
     }
     while (!isQueueEmpty(Q))
     {

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
-void clearResources_sched(int s);
+void handler(int s);
 void HPF();
 int shmid;
 int size;
@@ -22,11 +22,59 @@ int n_processes = 0;
 mqd_t msgq_id;
 mqd_t msg_id_processes;
 struct PCB *pcb;
+struct NodePCB *info_processs;
 struct Queue *ready;
+struct process_message mes_rec;
+struct process rec;
+struct process current;
+bool running = 0;
+int temp_finishtime = 0;
+//==========================
+void write_the_state()
+{
+    FILE *logfile;
+    logfile = fopen("scheduler.log", "a");
+    if (logfile == NULL)
+    {
+        printf("Error in openning scheduler.log file: \n");
+        return;
+    }
+    // char x[] = {};
+    // switch (info_processs->status)
+    // {
+    // case 0:
+    //     /* code */
+    //     break;
+    // case 1:
+    //     break;
+    // case 2:
+    //     break;
+    // default:
+    //     break;
+    // }
+    if (info_processs->status != 2) // finished
+    {
+        fprintf(logfile, "At time %d process %d %d arr %d total %d remain %d wait %d", getClk(),
+                info_processs->process.id, info_processs->status, info_processs->process.arrivaltime,
+                info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time);
+    }
+    else
+    {
+        fprintf(logfile, "At time %d process %d %d arr %d total %d remain %d wait %d TA %d WA %f", getClk(),
+                info_processs->process.id, info_processs->status, info_processs->process.arrivaltime,
+                info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time,
+                info_processs->turnaround_time, (info_processs->turnaround_time / (double)info_processs->process.runningtime) * 100 / 100.0f);
+    }
+    fprintf(logfile, "\n");
+    fclose(logfile);
+    return;
+}
+//==========================
 int main(int argc, char *argv[])
 {
     initClk();
-    signal(SIGINT, clearResources_sched);
+    signal(SIGINT, handler);
+    signal(SIGUSR2, handler);
     ready = createQueue();
     pcb = creatPCB();
     n_algo = atoi(argv[1]);
@@ -42,17 +90,8 @@ int main(int argc, char *argv[])
         perror("Error in openning message queue.");
         exit(-1);
     }
-    msg_id_processes = msgget(10, 0666 | IPC_CREAT);
-    if (msg_id_processes == -1)
-    {
-        perror("Error in openning message queue (msg_id_processes).");
-        exit(-1);
-    }
-    struct process_message mes_rec;
-    int once = 1;
     while (size < n_processes)
     {
-        struct process rec;
         if (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, !IPC_NOWAIT) == -1)
         {
             perror("Error in rec:");
@@ -62,9 +101,8 @@ int main(int argc, char *argv[])
             switch (n_algo)
             {
             case 1:
-                printf("ID:%d,at:%d \n",mes_rec.process.id,getClk());
                 insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
-                printQ(ready);
+                HPF();
                 break;
             case 2:
                 insertPrioQueue(ready, &mes_rec.process, mes_rec.process.runningtime);
@@ -79,54 +117,85 @@ int main(int argc, char *argv[])
             size++;
         }
     }
-    //printQ(ready);
-    // HPF();
-    // printPCB(pcb);
-    sleep(2);
+    printPCB(pcb);
+    //sleep(2);
     destroyClk(true);
+    //kill(getppid(), SIGINT);
     return 0;
 }
-void clearResources_sched(int signum)
+void handler(int signum)
 {
-    printf("Cleearing the Resources from scheduler. \n");
-    msgctl(msgq_id, IPC_RMID, 0);
-    msgctl(msg_id_processes, IPC_RMID, 0);
-    shmctl(shmid, IPC_RMID, NULL);
-    // Destroy the clock
-    // destroyClk(true);
-    // Exit the program
-    exit(signum);
+    switch (signum)
+    {
+    case SIGINT:
+        printf("Cleearing the Resources from scheduler. \n");
+        msgctl(msgq_id, IPC_RMID, 0);
+        shmctl(shmid, IPC_RMID, NULL);
+        // Destroy the clock
+        // destroyClk(true);
+        // Exit the program
+        signal(SIGINT, handler);
+        exit(signum);
+        break;
+    case SIGUSR2:
+
+        running = false;
+        info_processs->finish_time = getClk();
+        info_processs->remaining_time = 0;
+        info_processs->status = 2;
+        info_processs->turnaround_time = info_processs->finish_time - info_processs->process.arrivaltime;
+        update_node_PCB(pcb, info_processs);
+        signal(SIGUSR2, handler);
+        break;
+    }
 }
 
 void HPF()
 {
-    printPCB(pcb);
-    printf("\n");
-    struct process current;
     while (!isQueueEmpty(ready))
     {
-        struct NodePCB *info_processs = creatNodePCB();
-        current = dequeue(ready);
-        info_processs->process = current;
-        info_processs->starting_time = getClk();
-        info_processs->status = 1;
-        info_processs->spri = -1;
-        info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
-        info_processs->remaining_time = -1;
-        info_processs->finish_time = -1;
-        insertPCB(pcb,info_processs);
-        while (getClk() < (current.runningtime + info_processs->starting_time))
+        if (!running)
         {
-        }
-        if(getClk() == (current.runningtime + info_processs->starting_time))
-        {
-            info_processs->finish_time = getClk();
-        }
-        update_node_PCB(pcb,info_processs);
-    }
-    return ;
-}
+            info_processs = creatNodePCB();
+            current = dequeue(ready);
+            info_processs->process = current;
+            info_processs->starting_time = getClk();
+            info_processs->status = 1;
+            info_processs->spri = -1;
+            info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
+            info_processs->remaining_time = current.runningtime;
+            info_processs->finish_time = -1;
+            insertPCB(pcb, info_processs);
+            write_the_state();
+            while (getClk() < (current.runningtime + info_processs->starting_time))
+            {
+                if (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, IPC_NOWAIT) != -1)
+                {
+                    insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
+                    size++;
+                }
 
+                running = true;
+                pid_t ff = fork();
+                if (ff == -1)
+                {
+                    perror("error in forking \n");
+                }
+                if (ff == 0)
+                {
+                    char sremaing[10];
+                    sprintf(sremaing, "%d", current.runningtime);
+                    execl("./process.out", "./process.out", sremaing, NULL);
+                    exit(0);
+                }
+                // info_processs->finish_time = temp_finishtime;
+                // update_node_PCB(pcb, info_processs);
+            }
+            write_the_state();
+        }
+    }
+    return;
+}
 
 // // Shortest Remaining Time Next Algorithm
 // int SRTN(int time)

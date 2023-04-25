@@ -26,7 +26,7 @@ int isQueueEmptyPCB(struct PCB *B)
 }
 void insertPCB(struct PCB *B, struct NodePCB *p)
 {
-    // if(findID_PCB(B,p->process.id)!=NULL)
+    // if(findID_PCB(B,p->process.id) == 0)
     // {
     //     return; // to be modified
     // }
@@ -47,7 +47,7 @@ void insertPCB(struct PCB *B, struct NodePCB *p)
     //printf("inserting success \n");
     return;
 }
-struct NodePCB *findID_PCB(struct PCB *B, int id)
+int findID_PCB(struct PCB *B, int id)
 {
     struct NodePCB *temp;
     temp = B->Front;
@@ -55,11 +55,11 @@ struct NodePCB *findID_PCB(struct PCB *B, int id)
     {
         if (temp->process.id == id)
         {
-            return temp;
+            return 1;
         }
         temp = temp->Next;
     }
-    return NULL;
+    return 0;
 }
 void update_node_PCB(struct PCB *B, struct NodePCB *updateit)
 {
@@ -94,7 +94,7 @@ void printPCB(struct PCB *B)
     temp = B->Front;
     while (temp)
     {    
-        printf("process number:%d,arrived: %d,started: %d, finished:%d, waited: %d \n",temp->process.id,temp->process.arrivaltime,temp->starting_time,temp->finish_time,temp->waiting_time);
+        printf("process number:%d,arrived: %d,started: %d, finished:%d, waited: %d, Turnaround:%d \n",temp->process.id,temp->process.arrivaltime,temp->starting_time,temp->finish_time,temp->waiting_time,temp->turnaround_time);
         temp = temp->Next;
     }
     return;
