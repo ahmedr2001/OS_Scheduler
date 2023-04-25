@@ -62,7 +62,9 @@ int main(int argc, char *argv[])
             switch (n_algo)
             {
             case 1:
+                printf("ID:%d,at:%d \n",mes_rec.process.id,getClk());
                 insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
+                printQ(ready);
                 break;
             case 2:
                 insertPrioQueue(ready, &mes_rec.process, mes_rec.process.runningtime);
@@ -77,9 +79,10 @@ int main(int argc, char *argv[])
             size++;
         }
     }
+    //printQ(ready);
     // HPF();
     // printPCB(pcb);
-    sleep(1);
+    sleep(2);
     destroyClk(true);
     return 0;
 }
