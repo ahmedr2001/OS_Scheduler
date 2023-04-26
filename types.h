@@ -12,12 +12,13 @@ typedef struct NodePCB
 {
     struct process process;
     int spri;
-    int status; // 0 for waiting, 1 for running, 2 for finish
+    int status; // 0 for stopped, 1 for running, 2 for finish, 3 for resumed, 4 for started
     int starting_time;
     int waiting_time;
     int remaining_time;
     int finish_time;
     int turnaround_time;
+    int parentIDRR;
     struct NodePCB *Next;
 } NodePCB;
 typedef struct PCB

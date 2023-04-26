@@ -7,7 +7,9 @@
 
 struct NodePCB *creatNodePCB()
 {
-    return (struct NodePCB *)malloc(sizeof(NodePCB));
+    struct NodePCB * n = (struct NodePCB *)malloc(sizeof(NodePCB));
+    n->parentIDRR = -1;
+    return n;
 }
 struct PCB *creatPCB()
 {
@@ -24,12 +26,40 @@ int isQueueEmptyPCB(struct PCB *B)
         return 1;
     return 0;
 }
+struct NodePCB * dequeuePCB(struct PCB *B,struct process s)
+{
+    if(isQueueEmptyPCB(B))
+    {
+        return NULL;
+    }
+    if(B->count == 1)
+    {
+        if(B->Front->process.id == s.id)
+        {
+            B->count = 0;
+            NodePCB* temp = B->Front;
+            return temp;
+            B->Front =NULL;
+        }
+    }
+    NodePCB* temp = B->Front->Next;
+    NodePCB* prev = B->Front;
+    while (temp)
+    {
+        if(temp->process.id == s.id)
+        {
+            prev->Next = temp->Next;
+            B->count -=1;
+            return temp;
+        }
+        temp = temp->Next;
+        prev = prev->Next;
+    }
+    
+
+}
 void insertPCB(struct PCB *B, struct NodePCB *p)
 {
-    // if(findID_PCB(B,p->process.id) == 0)
-    // {
-    //     return; // to be modified
-    // }
     if (!p)
     {
         return;
@@ -41,25 +71,22 @@ void insertPCB(struct PCB *B, struct NodePCB *p)
         B->count++;
         return;
     }
+    struct NodePCB*temp;
+    temp = B->Front;
+     while (temp)
+    {
+        if (temp->process.id == p->process.id)
+        {
+            return;
+        }
+        temp = temp->Next;
+    }
+    free(temp);
     B->Rear->Next = p;
     B->Rear = p;
     B->count++;
     //printf("inserting success \n");
     return;
-}
-int findID_PCB(struct PCB *B, int id)
-{
-    struct NodePCB *temp;
-    temp = B->Front;
-    while (temp)
-    {
-        if (temp->process.id == id)
-        {
-            return 1;
-        }
-        temp = temp->Next;
-    }
-    return 0;
 }
 void update_node_PCB(struct PCB *B, struct NodePCB *updateit)
 {

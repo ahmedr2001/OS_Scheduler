@@ -17,6 +17,7 @@ int shmid;
 int size;
 int n_algo;
 int slice = 0;
+int starting_the_slice;
 int size = 0;
 int n_processes = 0;
 mqd_t msgq_id;
@@ -39,19 +40,26 @@ void write_the_state()
         printf("Error in openning scheduler.log file: \n");
         return;
     }
-    char* x;
+    char *x;
     switch (info_processs->status)
     {
     case 0:
-        x = "blocked";
+        x = "stopped";
         break;
     case 1:
         x = "started";
         break;
     case 2:
-        x = "stopped";
+        x = "finished";
+        break;
+    case 3:
+        x = "resumed";
+        break;
+    case 4:
+        x = "started";
         break;
     default:
+        x = "unknown";
         break;
     }
     if (info_processs->status != 2) // finished
@@ -111,6 +119,8 @@ int main(int argc, char *argv[])
                 break;
             case 3:
                 enqueue(ready, &mes_rec.process);
+                printf("hih \n");
+                RR();
                 break;
             default:
                 printf("Error in n_algo \n");
@@ -120,9 +130,9 @@ int main(int argc, char *argv[])
         }
     }
     printPCB(pcb);
-    //sleep(2);
+    // sleep(2);
     destroyClk(true);
-    //kill(getppid(), SIGINT);
+    // kill(getppid(), SIGINT);
     return 0;
 }
 void handler(int signum)
@@ -148,7 +158,8 @@ void handler(int signum)
         info_processs->turnaround_time = info_processs->finish_time - info_processs->process.arrivaltime;
         update_node_PCB(pcb, info_processs);
         signal(SIGUSR2, handler);
-        //write_the_state();
+        break;
+    case SIGUSR1:
         break;
     }
 }
@@ -191,15 +202,92 @@ void HPF()
                     execl("./process.out", "./process.out", sremaing, NULL);
                     exit(0);
                 }
-                // info_processs->finish_time = temp_finishtime;
-                // update_node_PCB(pcb, info_processs);
+                info_processs->parentIDRR = ff; // not necessary
             }
             write_the_state();
         }
     }
     return;
 }
-
+void RR()
+{
+    pid_t ff;
+    while (!isQueueEmpty(ready))
+    {
+            current = dequeue(ready);
+            info_processs = creatNodePCB();
+            info_processs->process = current;
+            info_processs->remaining_time = info_processs->process.runningtime;
+            info_processs->starting_time = -1;
+            info_processs->spri = -1;
+            info_processs->status = 0;
+            info_processs->finish_time = -1;
+            info_processs->waiting_time = -1;
+            info_processs->turnaround_time = -1;
+            insertPCB(pcb, info_processs);
+            printf("dequeue from ready : %d at: %d \n",info_processs->process.id,getClk());
+        if (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, IPC_NOWAIT) != -1)
+        {
+            printf("enqueue : %d at: %d \n",mes_rec.process.id,getClk());
+            enqueue(ready, &mes_rec.process);
+            size++;
+        }
+        if (running && (getClk() - starting_the_slice >= slice) && info_processs->remaining_time > slice)
+        {
+            running = 0;
+            kill(ff, SIGSTOP);
+            info_processs->status = 0;
+            info_processs->remaining_time -= slice;
+            enqueue(ready, &info_processs->process);
+            update_node_PCB(pcb, info_processs);
+            write_the_state();
+        }
+        if (!running)
+        {
+            running = 1;
+            //current = dequeue(ready);
+            info_processs = dequeuePCB(pcb, current);
+            if (info_processs->starting_time < 0)
+            {
+                info_processs->starting_time = getClk();
+                info_processs->status = 4;
+                info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
+                insertPCB(pcb,info_processs);
+                //update_node_PCB(pcb, info_processs);
+            }
+            else
+            {
+                info_processs->status = 3;
+                update_node_PCB(pcb, info_processs);
+            }
+            write_the_state();
+            if (info_processs->status == 4)
+            {
+                ff = fork();
+                if (ff == -1)
+                {
+                    perror("Error in forking.\n");
+                    exit(-1);
+                }
+                if (ff == 0)
+                {
+                    char sremaing[10];
+                    sprintf(sremaing, "%d", info_processs->remaining_time);
+                    execl("./process.out", "./process.out", sremaing, NULL);
+                    exit(0);
+                }
+                starting_the_slice = getClk();
+                info_processs->parentIDRR = ff;
+            }
+            else
+            {
+                starting_the_slice = getClk();
+                kill(info_processs->parentIDRR,SIGCONT);
+            }
+        }
+    }
+    return;
+}
 // // Shortest Remaining Time Next Algorithm
 // int SRTN(int time)
 // {
@@ -217,23 +305,3 @@ void HPF()
 //     return scheduledProcessIndex;
 // }
 
-// // Round-Robin Algorithm
-// int RR(int time, int previousProcessIndex)
-// {
-//     int scheduledProcessIndex = previousProcessIndex;
-//     if (time % quantum == 0) {
-//         int i = previousProcessIndex + 1;
-//         i %= size;
-//         while (true) {
-//             if (data[i].id != -1) {
-//                 break;
-//             }
-//             i++;
-//             i %= size;
-//         }
-
-//         scheduledProcessIndex = i;
-//     }
-
-//     return scheduledProcessIndex;
-// }
