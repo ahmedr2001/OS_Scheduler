@@ -62,9 +62,13 @@ void enqueue(struct Queue *q, struct process *p)
 
 struct process dequeue(struct Queue *q)
 {
-
-    struct Node *temp;
     struct process tempProcess;
+    tempProcess.id = -1;
+    if(q->count == 0)
+    {
+        return tempProcess;
+    }
+    struct Node *temp;
     tempProcess = q->Front->process;
 
     temp = q->Front;
