@@ -1,160 +1,100 @@
-#ifndef _PCB_H
-#define _PCB_H
 #include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include "types.h"
+#include <unistd.h>
 
-struct NodePCB *creatNodePCB()
+
+// defining the diffrent states of a process
+typedef short STATE;
+#define NotStarted 0
+#define Waiting 1
+#define Running 2
+#define Terminated 3 
+#define Stopped 4
+
+
+// defining the PCB struct (Process Control Block)
+struct PCB{
+    int id; // process id
+    int ArrTime; // time of arrival
+    int RunTime; // running time (in state of running it must be devremented)
+    int Priority; // priority (the less the number the higher the priority)
+    int WaitTime; // time spent waiting
+    int state; // ready or waiting or running or terminated
+    int TA; // turnaround time
+    int RemainingTime; // RemainingTime time
+    int startTime;
+    int endTime;
+    double WTA; // weighted tur arround time
+    int PID; // pid of the actual created process
+};
+
+// sets the main prameters of the pcb
+//  at the initialinzation the pcb hasn't arrived  
+void setPCB(struct PCB* pcb, int ID, int ARR, int RUN, int Pr)
 {
-    struct NodePCB * n = (struct NodePCB *)malloc(sizeof(NodePCB));
-    n->parentIDRR = -1;
-    n->Next = NULL;
-    n->finish_time = -1;
-    //n->process = NULL;
-    n->remaining_time = -1;
-    n->spri = -1;
-    n->starting_time = -1;
-    n->status = -1;
-    n->turnaround_time = -1;
-    n->waiting_time = -1;
-    return n;
+    pcb->id = ID;
+    pcb->ArrTime = ARR;
+    pcb->RunTime = RUN;
+    pcb->RemainingTime = pcb->RunTime;
+    pcb->Priority = Pr;
+    pcb->RemainingTime = RUN;
+    pcb->state = NotStarted;
+    pcb->WaitTime = 0;
 }
-struct PCB *creatPCB()
+
+//sets the value of a pcb by the value of another pcb
+void CopyPCB(struct PCB* pcb,struct PCB other)
 {
-    struct PCB *B;
-    B = (struct PCB *)malloc(sizeof(PCB));
-    B->Front = NULL;
-    B->Rear = NULL;
-    B->count = 0;
-    return B;
+    pcb->id = other.id;
+    pcb->ArrTime = other.ArrTime;
+    pcb->RunTime = other.RunTime;
+    pcb->Priority = other.Priority;
+    pcb->WaitTime = other.WaitTime;
+    pcb->state = other.state;
+    pcb->TA = other.TA;
+    pcb->WTA = other.WTA;
+    pcb->PID = other.PID;
+    pcb->startTime=other.startTime;
+    pcb->endTime=other.endTime;
+    pcb->RemainingTime=other.RemainingTime;
 }
-int isQueueEmptyPCB(struct PCB *B)
+
+// sets the state
+void setState(struct PCB* pcb, STATE s)
 {
-    if (B->count == 0)
-        return 1;
-    return 0;
+    pcb->state = s;
 }
-int insertedBefore(struct PCB *B,struct process s)
+
+// sets the wait time
+void SetWaitTime(struct PCB* pcb, int wait)
 {
-    NodePCB * temp = B->Front;
-    while (temp)
-    {
-        if(temp->process.id == s.id)
-        {
-            return 1;
-        }
-        temp =temp->Next;
-    }
-    return 0;
+    pcb->WaitTime = wait;
 }
-struct NodePCB * dequeuePCB(struct PCB *B,struct process s)
+
+// 
+void IncreaseWaitTime(struct PCB* pcb, int NewWait)
 {
-    if(isQueueEmptyPCB(B))
-    {
-        return NULL;
-    }
-    if(B->count == 1)
-    {
-        if(B->Front->process.id == s.id)
-        {
-            B->count = 0;
-            NodePCB* temp = B->Front;
-            return temp;
-            B->Front =NULL;
-        }
-    }
-    NodePCB* temp = B->Front->Next;
-    NodePCB* prev = B->Front;
-    while (temp)
-    {
-        if(temp->process.id == s.id)
-        {
-            prev->Next = temp->Next;
-            B->count -=1;
-            return temp;
-        }
-        temp = temp->Next;
-        prev = prev->Next;
-    }
-    return NULL;
+    pcb->WaitTime = pcb->WaitTime + NewWait;
 }
-void insertPCB(struct PCB *B, struct NodePCB *p)
+
+void fork_process(struct PCB* pcb)
 {
-    NodePCB * n = creatNodePCB();
-    if (!p)
+    // Create a new process using fork()
+    int process = fork();
+
+    // Check if there was an error
+    if(process == -1)
     {
-        return;
+        printf("error in forking\n");
     }
-    n->finish_time = p->finish_time;
-    n->parentIDRR = p->parentIDRR;
-    n->process = p->process;
-    n->remaining_time = p->remaining_time;
-    n->spri = p->spri;
-    n->starting_time = p->starting_time;
-    n->status = p->status;
-    n->turnaround_time = p->turnaround_time;
-    n->waiting_time = p->waiting_time; 
-    if (isQueueEmptyPCB(B) == 1)
+    // The child process
+    else if(process == 0)
     {
-        p->Next = NULL;
-        B->Front = B->Rear = n;
-        B->count++;
-        return;
-    }
-    struct NodePCB*temp;
-    temp = B->Front;
-     while (temp)
-    {
-        if (temp->process.id == p->process.id)
-        {
-            return;
-        }
-        temp = temp->Next;
-    }
-    free(temp);
-    B->Rear->Next = n;
-    B->Rear = n;
-    B->count++;
-    //printf("inserting success \n");
-    return;
-}
-void update_node_PCB(struct PCB *B, struct NodePCB *updateit)
-{
-    if(isQueueEmptyPCB(B))
-    {
-        return;
-    }
-    struct NodePCB *temp;
-    temp = B->Front;
-    while (temp)
-    {
-        if (temp->process.id == updateit->process.id)
-        {
-            break;
-        }
-        temp = temp->Next;
-    }
-    if(temp)
-    {
-        temp = updateit;
-        //printf("updating success\n");
+        // Convert the process ID to a character
+        char sendid = pcb->id + '0';
+        char * sendingid = &sendid;
+        execl("./process.out", "./process.out", sendingid, (char *)NULL);
     }
 }
-void printPCB(struct PCB *B)
-{
-    if(B->count == 0)
-    {
-        printf("Empty PCB.\n");
-        return;
-    }
-    struct NodePCB *temp;
-    temp = B->Front;
-    while (temp)
-    {    
-        printf("process number:%d,arrived: %d,started: %d, finished:%d, waited: %d, remaining: %d, Turnaround:%d \n",temp->process.id,temp->process.arrivaltime,temp->starting_time,temp->finish_time,temp->waiting_time,temp->remaining_time,temp->turnaround_time);
-        temp = temp->Next;
-    }
-    return;
-}
-#endif
+
+
+

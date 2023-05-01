@@ -1,123 +1,189 @@
-#include "headers.h"
-#include "Queue.h"
-#include "types.h"
-#include"PCB.h"
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <mqueue.h>
-#include <string.h>
-#include <sys/msg.h>
-char line[100];
-int shmid;
+#include "headers.h" // the other structs are inside
+
+// var
+int Algo;
+int time_quantum = 0;
+int count = 0;
+int pGeneratorToScheduler;
+// for input thing
+int a, b, c, d;
+struct PCB processArr[3];
+// methods
 void clearResources(int);
-mqd_t msgq_id;
+void MDR(int);
+struct PriorityQueue que;
+struct PCB processToBeSent;
+void get_num_algo();
+void Start_the_CLK_and_scheduler();
+void read_data_from_file();
+void IPC(struct PCB processToBeSent);
+struct PriorityQueue sendingQueue;
+int schedularID;
 int main(int argc, char *argv[])
 {
-    int n_of_algo = 1;
-    int slice = 2;
-    int n_processes = 0;
-    struct Queue *Q = createQueue();
-//--------------Reading processes from the FILE----------------------------
-    FILE *input_file = fopen("input test.txt", "r");
-    if (!input_file)
-    {
-        printf("Error opening file\n");
-        return 1;
-    }
-    while (fgets(line, sizeof(line), input_file) != NULL)
-    {
-        if (!(line[0] == '#'))
-        { 
-            n_processes++;
-            struct process temp;
-            //printf("%s", line);
-            sscanf(line, "%d %d %d %d", &temp.id, &temp.arrivaltime, &temp.runningtime, &temp.priority);
-            enqueue(Q, &temp);
-        }
-    }
-    fclose(input_file);
-    //----------------------------- create the message queue---------------
-    msgq_id = msgget(7, 0666 | IPC_CREAT);
-    if (msgq_id == -1)
-    {
-        perror("Error in creating message queue.");
-        exit(-1);
-    }
-    //  if (msgctl(msgq_id, IPC_RMID, NULL) == -1) {
-    //     perror("msgctl");
-    //     return 1;
-    // }
-    // return 0;
-    //-----------------------------
     signal(SIGINT, clearResources);
-    printf("Enter the number of the algo, 1 for HPF, 2 for SRTN, 3 for RR: \n");
-    scanf("%d", &n_of_algo);
-    printf("%d \n",n_of_algo);
-    char string_algo[10];
-    sprintf(string_algo, "%d", n_of_algo);
-    if (n_of_algo == 3)
-    {
-        printf("Enter the Quantum: \n");
-        scanf("%d", &slice);
-    }
-    char string_slice[10];
-    char string_n_processes[10];
-    sprintf(string_slice,"%d" ,slice);
-    sprintf(string_n_processes,"%d" ,n_processes);
-    pid_t pid = fork();
-    if (pid == -1)
-    {
-       perror("Error in fork!");
-       exit(-1);
-    }
-    else if (pid == 0)
-    {
-       execl("./clk.out", "./clk.out", NULL); // execute the clock process
-    }
+    signal(SIGALRM, MDR);
+    // TODO Initialization
+    // 1. Read the input files.
+    read_data_from_file();
+    // 2. Ask the user for the chosen scheduling algorithm and its parameters, if there are any.
+    get_num_algo();
+    // 3. Initiate and create the scheduler and clock processes.
+    struct PriorityQueue newQue;
+    initializeQueue(&newQue);
+    Start_the_CLK_and_scheduler();
+    // 4. Use this function after creating the clock process to initialize clock
     initClk();
     int x = getClk();
-    printf("current time is %d\n", x);
-    pid_t pid1 = fork();
-    if (pid1 == -1)
-    {
-       perror("Error in fork!");
-       exit(-1);
-    }
-    if (pid1 == 0)
-    {
-       execl("./scheduler.out", "./scheduler.out", string_algo, string_slice,string_n_processes, NULL);
-       exit(0);
-    }
-    while (!isQueueEmpty(Q))
-    {
-        if(getClk() >= Q->Front->process.arrivaltime)
+    int i = 0;
+    while (que.head != NULL)
+    { // should loop on the input queue
+        int y = getClk();
+        processToBeSent = que.head->pcb;
+        if (processToBeSent.ArrTime <= y - x)
         {
-            struct process tempo;
-            tempo = dequeue(Q);
-            struct process_message mes_send;
-            mes_send.process = tempo;
-            mes_send.mtype = 1;
-            int check = msgsnd(msgq_id, &mes_send, sizeof(mes_send.process), !IPC_NOWAIT);
-            if (check == -1)
+            DeQueue(&que, &processToBeSent);
+            IPC(processToBeSent);
+            if (Algo == 2)
             {
-                perror("ERROR in sending ");
+                kill(schedularID, SIGALRM);
+                // The purpose of this line is to notify the scheduler process
+                // that a new process has arrived and needs to be added to the scheduling queue
+            }
+            if (que.head)
+            {
+                int timeToWait = que.head->pcb.ArrTime - processToBeSent.ArrTime;
+                if (timeToWait != 0)
+                {
+                    alarm(timeToWait);
+                    pause(); // Suspend the process until a signal arrives.
+                }
             }
         }
     }
-    sleep(120);    
-    //destroyClk(true);
+
+    pause();
     return 0;
+}
+
+void read_data_from_file()
+{
+    int id;
+    int arrivalTime;
+    int runningTime;
+    int priority;
+    FILE *process = fopen("input test.txt", "r");
+    if (process == NULL)
+    {
+        printf("Error! File cannot be opened.");
+        exit(1);
+    }
+    char ignoredCharacter[100];
+    while (fscanf(process, "%s", ignoredCharacter) == 1)
+    {
+        if (*ignoredCharacter == '#')
+        {
+            fgets(ignoredCharacter, sizeof(ignoredCharacter), process);
+            continue;
+        }
+        else
+        {
+            id = atoi(ignoredCharacter);
+            if (fscanf(process, "%d %d %d", &arrivalTime, &runningTime, &priority) != 3)
+            {
+                printf("Error reading input file\n");
+                exit(1);
+            }
+            setPCB(&processToBeSent, id, arrivalTime, runningTime, priority);
+            // printf("id %d, Arr time %d, Running time %d, Priority %d \n", processToBeSent.id, processToBeSent.ArrTime, processToBeSent.RunTime, processToBeSent.Priority);
+            AddAccordingToArrivalTime(&que, processToBeSent);
+            count++;
+        }
+    }
+
+fclose(process);
+}
+void IPC(struct PCB processToBeSent)
+{
+    pGeneratorToScheduler = msgget(1234, 0666 | IPC_CREAT);
+    if (pGeneratorToScheduler == -1)
+    {
+        perror("error in creat");
+        exit(-1);
+    }
+    struct msgBuff processInfo;
+    processInfo.mtype = 10;
+    CopyPCB(&processInfo.process, processToBeSent);
+    int val = msgsnd(pGeneratorToScheduler, &processInfo, sizeof(processInfo.process), IPC_NOWAIT);
+    if (val == -1)
+        printf("Error in send process\n");
 }
 
 void clearResources(int signum)
 {
     // TODO Clears all resources in case of interruption
-    printf("Cleearing the Resources FROM process generator. \n");
-    msgctl(msgq_id,IPC_RMID,0);
-    // Destroy the clock
-    shmctl(shmid, IPC_RMID, NULL);
+    msgctl(pGeneratorToScheduler, IPC_RMID, (struct msqid_ds *)0);
     destroyClk(true);
-    exit(signum);
+    exit(0);
+}
+void MDR(int x)
+{
+    // printf("hi\n");
+}
+
+void get_num_algo()
+{
+    printf("Choose the prefered Algorithm....\n");
+    printf("1) HPF. 2) SRTN. 3) RR. \n");
+    scanf("%d", &Algo);
+
+    while (!(Algo == 1 || Algo == 2 || Algo == 3))
+    {
+        printf("Choose A valid Number.\n");
+        scanf("%d", &Algo);
+    }
+    if (Algo == 3)
+    {
+        printf("Enter the slice time:\n");
+        scanf("%d", &time_quantum);
+    }
+}
+
+void Start_the_CLK_and_scheduler()
+{
+    int pid;
+    for (int i = 0; i < 2; i++)
+    {
+        pid = fork();
+        if (pid == 0)
+        {
+            if (i == 0)
+            {
+                printf("CLK forking...\n");
+                char *argv[] = {"./clk.out", NULL};
+                execv(argv[0], argv);
+            }
+            else
+            {
+                printf("scheduler forking...\n");
+                char cSendAlgo[10];
+                char cSendTime_quantum[10];
+                char parentID[10];
+                char Pcount[10];
+                sprintf(cSendAlgo, "%d", Algo);
+                sprintf(cSendTime_quantum, "%d", time_quantum);
+                sprintf(parentID, "%d", getppid());
+                sprintf(Pcount, "%d", count);
+                char *argv[] = {"./scheduler.out", cSendAlgo, cSendTime_quantum, parentID, Pcount, 0};
+                execv(argv[0], argv);
+            }
+            // pray for not reaching here
+            printf("Failed to execute child process\n");
+            exit(1);
+        }
+        else if (pid != 0 && i == 1)
+        {
+            schedularID = pid;
+        }
+    }
 }

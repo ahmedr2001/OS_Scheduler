@@ -1,351 +1,453 @@
 #include "headers.h"
-#include "Queue.h"
-#include "types.h"
-#include "PCB.h"
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <mqueue.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-void handler(int s);
-void HPF();
-void RR();
-int shmid;
-int n_algo;
-int slice = 0;
-int starting_the_slice;
-int remaing_processes = 0;
-int n_processes = 0;
-mqd_t msgq_id;
-mqd_t msg_id_processes;
-struct PCB *pcb;
-struct NodePCB *info_processs;
-struct Queue *ready;
-struct process_message mes_rec;
-struct process rec;
-struct process current;
-bool running = 0;
-int temp_finishtime = 0;
-FILE *logfile;
-//==========================
-void write_the_state()
-{
-    logfile = fopen("scheduler.log", "a");
-    if (logfile == NULL)
-    {
-        printf("Error in openning scheduler.log file: \n");
-        return;
-    }
-    char *x;
-    switch (info_processs->status)
-    {
-    case 0:
-        x = "stopped";
-        break;
-    case 1:
-        x = "started";
-        break;
-    case 2:
-        x = "finished";
-        break;
-    case 3:
-        x = "resumed";
-        break;
-    case 4:
-        x = "started";
-        break;
-    default:
-        x = "unknown";
-        break;
-    }
+#include "math.h"
 
-    if (info_processs->status != 2) // finished
-    {
-        fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d", getClk(),
-                info_processs->process.id, x, info_processs->process.arrivaltime,
-                info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time);
-    }
-    else
-    {
-        fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d TA %d WA %f", getClk(),
-                info_processs->process.id, x, info_processs->process.arrivaltime,
-                info_processs->process.runningtime, info_processs->remaining_time, info_processs->waiting_time,
-                info_processs->turnaround_time, (info_processs->turnaround_time / (double)info_processs->process.runningtime) * 100 / 100.0f);
-    }
-    fprintf(logfile, "\n");
-    fclose(logfile);
-    return;
-}
-//==========================
+#define hpf_Algo 1
+#define strn_Algo 2
+#define rr_Algo 3
+char Algo;
+int time_quantum = 1;
+bool isRunning;
+// algos
+void HPF();
+void SRTN();
+void RR();
+struct PCB IPC();
+void Run(struct PCB *processToRun);
+void handler1();
+void MDR(int);
+FILE *SchedulerLog;
+FILE *SchedulerPerf;
+int maxCount;
+int parentID;
+double *WTA;
+double *Wait;
+double *totalRun;
+int endTime;
+int startTime;
 int main(int argc, char *argv[])
 {
+    // signal(SIGCHLD, SIG_IGN);
+    signal(SIGALRM, MDR);
+    Algo = atoi(argv[1]);
+    if (Algo == 3)
+        time_quantum = atoi(argv[2]);
+    parentID = atoi(argv[3]);
+    maxCount = atoi(argv[4]);
+    WTA = calloc(maxCount, sizeof(double));
+    Wait = calloc(maxCount, sizeof(double));
+    totalRun = calloc(maxCount, sizeof(double));
+
     initClk();
-    signal(SIGINT, handler);
-    signal(SIGUSR2, handler);
-    ready = createQueue();
-    pcb = creatPCB();
-    n_algo = atoi(argv[1]);
-    if (n_algo == 3)
+    int x = getClk();
+
+    SchedulerLog = fopen("scheduler.log", "w");
+    switch (Algo)
     {
-        slice = atoi(argv[2]);
+    case hpf_Algo:
+        HPF();
+        break;
+    case strn_Algo:
+        signal(SIGCHLD, handler1);
+        SRTN();
+        break;
+    case rr_Algo:
+        RR();
+        break;
     }
-    n_processes = atoi(argv[3]);
-    remaing_processes = n_processes;
-    printf("algorithm number: %d , slice: %d , n_processes: %d \n", n_algo, slice, n_processes);
-    msgq_id = msgget(7, 0666 | IPC_CREAT);
-    if (msgq_id == -1)
+    fclose(SchedulerLog);
+    double avgWait = 0;
+    double avgWTA = 0;
+    double CPUperf = 0;
+    double std = 0.0;
+    for (int i = 0; i < maxCount; i++)
     {
-        perror("Error in openning message queue.");
-        exit(-1);
+        avgWait += Wait[i];
+        avgWTA += WTA[i];
+        CPUperf += totalRun[i];
     }
-    if (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, !IPC_NOWAIT) == -1)
+
+    avgWTA = avgWTA / maxCount;
+    avgWait = avgWait / maxCount;
+    for (int i = 0; i < maxCount; i++)
     {
-        perror("Error in rec:");
+        std += pow((WTA[i] - avgWTA), 2);
+    }
+    std = sqrt(std / maxCount);
+    // printf("total run time = %f\n",CPUperf);
+    // printf("Last clock equals %d\n", getClk());
+    CPUperf = (CPUperf) / (endTime - startTime);
+
+    SchedulerPerf = fopen("scheduler.perf", "w");
+    if (Algo == 1)
+        fprintf(SchedulerPerf, "# The running algorithm is : HPF\n");
+    else if (Algo == 2)
+        fprintf(SchedulerPerf, "# The running algorithm is : SRTN\n");
+    else
+        fprintf(SchedulerPerf, "# The running algorithm is : RR\n");
+    fprintf(SchedulerPerf, "CPU utilization = %.2f%%\n", CPUperf * 100);
+    fprintf(SchedulerPerf, "Avg WTA = %.2f\n", avgWTA);
+    fprintf(SchedulerPerf, "Avg waiting = %.2f\n", avgWait);
+    fprintf(SchedulerPerf, "Std WTA = %.2f\n", std);
+    fclose(SchedulerPerf);
+    destroyClk(true);
+    return 0;
+}
+
+struct PCB tempProcess;
+struct PCBNode processNode;
+struct PCB schProcess;
+
+int val;
+int c = 0;
+int pDone = 0;
+void HPF()
+{
+
+    fprintf(SchedulerLog, "# The running algorithm is : HPF\n");
+    int count = maxCount; /// should be the number of processes
+    isRunning = false;
+    schProcess.id = -1;
+    struct PriorityQueue HPF_Ready;
+    initializeQueue(&HPF_Ready);
+    int x = getClk();
+    int s = 0;
+    while (1)
+    {
+        struct msgBuff processInfo;
+        int pGeneratorToScheduler = msgget(1234, 0666 | IPC_CREAT);
+        if (pGeneratorToScheduler == -1)
+        {
+            perror("error in creat\n");
+            exit(-1);
+        }
+        {
+            val = 1;
+            while (val != -1)
+            {
+                val = msgrcv(pGeneratorToScheduler, &processInfo, sizeof(processInfo.process), 0, IPC_NOWAIT); // ...........
+                if (val == -1)
+                    break;
+                CopyPCB(&tempProcess, processInfo.process);
+                AddAccordingToPriority(&HPF_Ready, tempProcess);
+            }
+            //
+            if (HPF_Ready.head != NULL)
+            {
+                DeQueue(&HPF_Ready, &schProcess);
+                schProcess.startTime = getClk();
+                IncreaseWaitTime(&schProcess, schProcess.startTime - schProcess.ArrTime);
+                fprintf(SchedulerLog, "At time %d process %d started arr %d total %d remain %d wait %d \n", schProcess.startTime, schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RunTime, schProcess.WaitTime);
+                if (s == 0)
+                {
+                    startTime = schProcess.startTime;
+                    s++;
+                }
+                // Run(&schProcess);
+                isRunning = true;
+                int pid;
+                pid = fork();
+                if (pid == 0)
+                {
+                    // printf("process forking...\n");
+                    char runTime[10];
+                    sprintf(runTime, "%d", schProcess.RunTime);
+                    char *process_arg_list[] = {"./process.out", runTime, 0};
+                    // RunningProcessID = getpid();
+                    execv(process_arg_list[0], process_arg_list);
+                }
+                else
+                {
+                    int status;
+                    int y = wait(&status);
+                    WIFEXITED(status);
+                    schProcess.PID = pid;
+                }
+                fprintf(SchedulerLog, "At time %d process %d finished arr %d total %d remain %d wait %d TA %d WTA %.2f\n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, 0, schProcess.WaitTime, getClk() - (schProcess.ArrTime), (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime);
+                endTime = getClk();
+                WTA[pDone] = (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime;
+                Wait[pDone] = schProcess.WaitTime;
+                totalRun[pDone] = schProcess.RunTime;
+                schProcess.state = Terminated;
+                pDone++;
+            }
+        }
+
+        if (pDone == maxCount)
+        {
+            // finishing 3ala 5er
+            kill(getppid(), SIGTERM);
+            break;
+        }
+    }
+}
+int RunningProcessID;
+void Run(struct PCB *processToRun)
+{
+    if (processToRun->state == Stopped && Algo == 2)
+    {
+        // printf("A process is about to be running. \n");
+        processToRun->state = Running;
+        kill(processToRun->PID, SIGCONT);
+        fprintf(SchedulerLog, "At time %d process %d resumed arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+        return;
+    }
+    int pid;
+    pid = fork();
+    if (pid == 0)
+    {
+        char runTime[10];
+        sprintf(runTime, "%d", processToRun->RunTime);
+        char *process_arg_list[] = {"./process.out", runTime, 0};
+        RunningProcessID = getpid();
+        execv(process_arg_list[0], process_arg_list);
     }
     else
     {
-        switch (n_algo)
-        {
-        case 1:
-            insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
-            HPF();
-            break;
-        // case 2:
-        //     insertPrioQueue(ready, &mes_rec.process, mes_rec.process.runningtime);
-        //     break;
-        case 3:
-            enqueue(ready, &mes_rec.process);
-            printf("enqueu: %d at: %d , from main \n", mes_rec.process.id, getClk());
-            RR();
-            break;
-        default:
-            printf("Error in n_algo \n");
-            break;
-        }
-    }
-    //}
-    printPCB(pcb);
-    // sleep(2);
-    // destroyClk(true);
-    kill(getppid(), SIGINT);
-    return 0;
-}
-void handler(int signum)
-{
-    switch (signum)
-    {
-    case SIGINT:
-        printf("Cleearing the Resources from scheduler. \n");
-        msgctl(msgq_id, IPC_RMID, 0);
-        shmctl(shmid, IPC_RMID, NULL);
-        // Destroy the clock
-        destroyClk(true);
-        // Exit the program
-        signal(SIGINT, handler);
-        exit(signum);
-        break;
-    case SIGUSR2:
-        if (n_algo != 1)
-        {
-            break;
-        }
-        running = false;
-        info_processs->finish_time = getClk();
-        info_processs->remaining_time = 0;
-        info_processs->status = 2;
-        info_processs->turnaround_time = info_processs->finish_time - info_processs->process.arrivaltime;
-        update_node_PCB(pcb, info_processs);
-        signal(SIGUSR2, handler);
-        break;
-    case SIGUSR1:
-        break;
-    default:
-        break;
-    }
-}
 
-void HPF()
-{
-    while (!isQueueEmpty(ready))
-    {
-        if (!running)
-        {
-            info_processs = creatNodePCB();
-            current = dequeue(ready);
-            info_processs->process = current;
-            info_processs->starting_time = getClk();
-            info_processs->status = 1;
-            info_processs->spri = -1;
-            info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
-            info_processs->remaining_time = current.runningtime;
-            info_processs->finish_time = -1;
-            insertPCB(pcb, info_processs);
-            write_the_state();
-            while (getClk() < (current.runningtime + info_processs->starting_time))
-            {
-                while (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, IPC_NOWAIT) != -1)
-                {
-                    insertPrioQueue(ready, &mes_rec.process, mes_rec.process.priority);
-                }
-
-                running = true;
-                pid_t ff = fork();
-                if (ff == -1)
-                {
-                    perror("error in forking \n");
-                }
-                if (ff == 0)
-                {
-                    char sremaing[10];
-                    sprintf(sremaing, "%d", current.runningtime);
-                    execl("./process.out", "./process.out", sremaing, NULL);
-                    exit(0);
-                }
-                info_processs->parentIDRR = ff; // not necessary
-            }
-            // kill(info_processs->parentIDRR,SIGKILL);
-            write_the_state();
-        }
+        processToRun->PID = pid;
+        processToRun->state = Running;
     }
-    return;
 }
+//aktar 7aga mo2refa
 void RR()
 {
-    pid_t ff;
-    while (!isQueueEmpty(ready) || remaing_processes > 0)
+    fprintf(SchedulerLog, "# The running algorithm is : RR\n");
+    int count = maxCount; // the number of processes
+    isRunning = false;
+
+    struct PriorityQueue RR_Ready;
+    initializeQueue(&RR_Ready);
+    struct PriorityQueue Stopped_RR_Ready;
+    initializeQueue(&Stopped_RR_Ready);
+    int x = getClk();
+
+    int s = 0;
+    while (1)
     {
-        while (msgrcv(msgq_id, &mes_rec, sizeof(mes_rec.process), 0, IPC_NOWAIT) != -1)
+        struct msgBuff processInfo;
+        int pGeneratorToScheduler = msgget(1234, 0666 | IPC_CREAT);
+        if (pGeneratorToScheduler == -1)
         {
-            printf("enqueue : %d at: %d \n", mes_rec.process.id, getClk());
-            enqueue(ready, &mes_rec.process);
+            perror("error in creat\n");
+            exit(-1);
         }
-        current = dequeue(ready);
-        if (current.id == -1)
+
         {
-            continue;
+
+            int rc;
+            struct msqid_ds buf;
+            int num_messages;
+
+            rc = msgctl(pGeneratorToScheduler, IPC_STAT, &buf);
+            num_messages = buf.msg_qnum;
+
+            for (int i = 0; i < num_messages; i++)
+            {
+                val = msgrcv(pGeneratorToScheduler, &processInfo, sizeof(processInfo.process), 0, !IPC_NOWAIT); // ...........
+                CopyPCB(&tempProcess, processInfo.process);
+                Add(&RR_Ready, tempProcess);
+            }
+
+            if (RR_Ready.head != NULL)
+            {
+                DeQueue(&RR_Ready, &schProcess);
+                schProcess.startTime = getClk();
+                IncreaseWaitTime(&schProcess, schProcess.startTime - schProcess.ArrTime);
+                if (schProcess.RemainingTime > time_quantum)
+                {
+
+                    fprintf(SchedulerLog, "At time %d process %d started arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                    if (s == 0)
+                    {
+                        startTime = schProcess.startTime;
+                        s++;
+                    }
+                    Run(&schProcess);
+
+                    alarm(time_quantum + getClk() - x);
+                    pause();
+
+                    kill(schProcess.PID, SIGSTOP);
+
+                    schProcess.RemainingTime = schProcess.RemainingTime - time_quantum;
+
+                    fprintf(SchedulerLog, "At time %d process %d stopped arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                    schProcess.state = Stopped;
+                    IncreaseWaitTime(&schProcess, -getClk());
+                    Add(&Stopped_RR_Ready, schProcess);
+                }
+                else
+                {
+                    fprintf(SchedulerLog, "At time %d process %d started arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                    if (s == 0)
+                    {
+                        startTime = schProcess.startTime;
+                        s++;
+                    }
+
+                    Run(&schProcess);
+
+                    int status;
+                    int x;
+                    x = wait(&status);
+                    WIFEXITED(status);
+
+                    fprintf(SchedulerLog, "At time %d process %d finished arr %d total %d remain %d wait %d TA %d WTA %.2f\n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, 0, schProcess.WaitTime, getClk() - (schProcess.ArrTime), (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime);
+                    endTime = getClk();
+                    WTA[pDone] = (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime;
+                    Wait[pDone] = schProcess.WaitTime;
+                    totalRun[pDone] = schProcess.RunTime;
+                    schProcess.state = Terminated;
+                    pDone++;
+                }
+            }
+            else if (Stopped_RR_Ready.head != NULL)
+            {
+                DeQueue(&Stopped_RR_Ready, &schProcess);
+                IncreaseWaitTime(&schProcess, getClk());
+                if (schProcess.RemainingTime > time_quantum)
+                {
+                    kill(schProcess.PID, SIGCONT);
+                    fprintf(SchedulerLog, "At time %d process %d resumed arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+
+                    // sleep(time_quantum); WRONG
+                    alarm(time_quantum + getClk() - x);
+                    pause();
+                    kill(schProcess.PID, SIGSTOP);
+                    schProcess.RemainingTime = schProcess.RemainingTime - time_quantum;
+                    fprintf(SchedulerLog, "At time %d process %d stopped arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                    schProcess.state = Stopped;
+                    IncreaseWaitTime(&schProcess, -getClk());
+                    Add(&Stopped_RR_Ready, schProcess);
+                }
+                else
+                {
+                    kill(schProcess.PID, SIGCONT);
+                    fprintf(SchedulerLog, "At time %d process %d resumed arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                    int status;
+                    int x;
+                    x = wait(&status);
+                    WIFEXITED(status);
+                    fprintf(SchedulerLog, "At time %d process %d finished arr %d total %d remain %d wait %d TA %d WTA %.2f\n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, 0, schProcess.WaitTime, getClk() - (schProcess.ArrTime), (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime);
+                    endTime = getClk();
+                    WTA[pDone] = (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime;
+                    Wait[pDone] = schProcess.WaitTime;
+                    totalRun[pDone] = schProcess.RunTime;
+                    schProcess.state = Terminated;
+                    pDone++;
+                }
+            }
         }
-        //info_processs = dequeuePCB(pcb,info_processs->process);
-        info_processs->process = current;
-        if (!insertedBefore(pcb, current))
+        x = getClk();
+        if (pDone == maxCount)
         {
-            //info_processs = creatNodePCB();
-            //info_processs->process = current;
-            info_processs->status = 4;
-            info_processs->remaining_time = info_processs->process.runningtime;
-            insertPCB(pcb, info_processs);
+            // fifinshing 3ala 5er
+            kill(getppid(), SIGTERM);
+            break;
         }
-        update_node_PCB(pcb,info_processs);
-        printf("dequeue from ready : %d at: %d \n", info_processs->process.id, getClk());
-        if(running && (getClk() - starting_the_slice) == slice)
-        {
-            // kill(info_processs->parentIDRR, SIGSTOP);
-            info_processs->status = 0; // stopped
-            //int remain = info_processs->remaining_time - slice;
-            printf("ID : %d remain : %d starting_the_slice : %d \n",info_processs->process.id,info_processs->remaining_time - slice, starting_the_slice);
-            printf("CLK : %d \n",getClk());
-            if ((info_processs->remaining_time - slice) > 0)
-            {
-                info_processs->remaining_time -= slice;
-                enqueue(ready, &info_processs->process);
-                printf("preempting :%d \n", info_processs->process.id);
-                starting_the_slice = getClk();
-                running = 0;
-            }
-            else
-            {
-                info_processs->remaining_time = 0;
-                remaing_processes = remaing_processes - 1;
-                printf("decreaseing the remaing_processes.\n");
-                info_processs->status = 2; // finished
-                // kill(info_processs->parentIDRR,SIGKILL);
-                printf("finishing: %d at: %d\n", info_processs->process.id, getClk());
-                running = 0;
-            }
-            update_node_PCB(pcb, info_processs);
-            write_the_state();
-            continue;
-        }
-        if (!running)
-        {
-            running = 1;
-            info_processs = dequeuePCB(pcb, current);
-            if (info_processs == NULL)
-            {
-                running = 0;
-                continue;
-            }
-            if (info_processs->starting_time < 0)
-            {
-                info_processs->parentIDRR = -1;
-                info_processs->starting_time = getClk();
-                info_processs->status = 4; // started
-                printf("starting :%d \n", info_processs->process.id);
-                printf("ID: %d, status: %d\n", info_processs->process.id, info_processs->status);
-                info_processs->waiting_time = getClk() - info_processs->process.arrivaltime;
-                insertPCB(pcb, info_processs);
-                write_the_state();
-            }
-            else
-            {
-                info_processs->status = 3; // resumed
-                printf("resuming :%d \n", info_processs->process.id);
-                starting_the_slice = getClk();
-                insertPCB(pcb, info_processs);
-                // kill(info_processs->parentIDRR, SIGCONT);
-                write_the_state();
-            }
-            if (info_processs->status == 4)
-            {
-                insertPCB(pcb, info_processs);
-                printf("forking :%d \n", info_processs->process.id);
-                // ff = fork();
-                // if (ff == -1)
-                // {
-                //     perror("Error in forking.\n");
-                //     exit(-1);
-                // }
-                // if (ff == 0)
-                // {
-                //     char sremaing[10];
-                //     sprintf(sremaing, "%d", info_processs->remaining_time);
-                //     execl("./process.out", "./process.out", sremaing, NULL);
-                //     exit(0);
-                // }
-                starting_the_slice = getClk();
-                info_processs->parentIDRR = ff;
-                update_node_PCB(pcb, info_processs);
-                enqueue(ready, &info_processs->process);
-            }
-            else
-            {
-                insertPCB(pcb, info_processs);
-                starting_the_slice = getClk();
-                enqueue(ready, &info_processs->process);
-                // kill(info_processs->parentIDRR, SIGCONT);
-            }
-        }
-        printf("remaing_processes: %d \n", remaing_processes);
     }
-    return;
 }
+void handler1() // from sigchild
+{
+    raise(SIGALRM);
+}
+void SRTN()
+{
+    fprintf(SchedulerLog, "# The running algorithm is : SRTN\n");
+    int count = maxCount; // the number of processes
+    isRunning = false;
+    schProcess.id = -1;
+    struct PriorityQueue SRTN_Ready;
+    initializeQueue(&SRTN_Ready);
+    initClk();
+    int x = getClk();
+    int s = 0;
+    while (1)
+    {
+        struct msgBuff processInfo;
+        int pGeneratorToScheduler = msgget(1234, 0666 | IPC_CREAT);
+        if (pGeneratorToScheduler == -1)
+        {
+            perror("error in creat\n");
+            exit(-1);
+        }
+        if (c < maxCount)
+        {
+            val = 1;
+            while (val != -1)
+            {
+                val = msgrcv(pGeneratorToScheduler, &processInfo, sizeof(processInfo.process), 0, IPC_NOWAIT); // ...........
+                if (val == -1)
+                    break;
+                CopyPCB(&tempProcess, processInfo.process);
+                AddAccordingToRemainingTime(&SRTN_Ready, tempProcess);
+            }
 
-// // Shortest Remaining Time Next Algorithm
-// int SRTN(int time)
-// {
-//     int scheduledProcessIndex = -1;
-//     int min_rt = 1e9;
-//     for (int i = 0; i < size; i++) {
-//         if (data[i].id != -1) {
-//             if (data[i].remainingTime < min_rt) {
-//                 min_rt = data[i].remainingTime;
-//                 scheduledProcessIndex = i;
-//             }
-//         }
-//     }
+            if (schProcess.id != -1 && isRunning == true)
+            {
+                schProcess.RemainingTime = schProcess.RemainingTime - (getClk() - schProcess.startTime);
+                if (schProcess.RemainingTime <= 0 && schProcess.state != Terminated)
+                {
+                    schProcess.state = Terminated;
+                    isRunning = false;
+                    fprintf(SchedulerLog, "At time %d process %d finished arr %d total %d remain %d wait %d TA %d WTA %.2f\n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, 0, schProcess.WaitTime, getClk() - (schProcess.ArrTime), (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime);
+                    endTime = getClk();
+                    WTA[pDone] = (double)(getClk() - (schProcess.ArrTime)) / schProcess.RunTime;
+                    Wait[pDone] = schProcess.WaitTime;
+                    totalRun[pDone] = schProcess.RunTime;
+                    pDone++;
+                    int status;
+                    int y = wait(&status);
+                    WIFEXITED(status);
+                }
+                if (SRTN_Ready.head != NULL)
+                {
+                    if (SRTN_Ready.head->pcb.RemainingTime < schProcess.RemainingTime)
+                    {
+                        schProcess.state = Stopped;
+                        isRunning = false;
+                        kill(schProcess.PID, SIGSTOP);
+                        fprintf(SchedulerLog, "At time %d process %d stopped arr %d total %d remain %d wait %d \n", getClk(), schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RemainingTime, schProcess.WaitTime);
+                        IncreaseWaitTime(&schProcess, -getClk());
+                        AddAccordingToRemainingTime(&SRTN_Ready, schProcess);
+                    }
+                }
+            }
 
-//     return scheduledProcessIndex;
-// }
+            if (SRTN_Ready.head != NULL && isRunning == false)
+            {
+                DeQueue(&SRTN_Ready, &schProcess);
+                schProcess.startTime = getClk();
+
+                if (schProcess.state != Stopped)
+                {
+                    IncreaseWaitTime(&schProcess, schProcess.startTime - schProcess.ArrTime);
+                    fprintf(SchedulerLog, "At time %d process %d started arr %d total %d remain %d wait %d \n", schProcess.startTime, schProcess.id, schProcess.ArrTime, schProcess.RunTime, schProcess.RunTime, schProcess.WaitTime);
+                    if (s == 0)
+                    {
+                        startTime = schProcess.startTime;
+                        s++;
+                    }
+                    schProcess.startTime = getClk();
+                    IncreaseWaitTime(&schProcess, schProcess.startTime - schProcess.ArrTime);
+                }
+                if (schProcess.state == Stopped)
+                {
+                    IncreaseWaitTime(&schProcess, getClk());
+                }
+                Run(&schProcess);
+                isRunning = true;
+            }
+        }
+
+        if (pDone == maxCount)
+        {
+            break;
+        }
+        pause();
+    }
+}
+void MDR(int x) //
+{
+    // printf("I received an alarm signal at %d\n", getClk());
+}
