@@ -2,6 +2,7 @@
 
 // var
 int Algo;
+int memPol;
 int time_quantum = 0;
 int count = 0;
 int pGeneratorToScheduler;
@@ -72,6 +73,7 @@ void read_data_from_file()
     int arrivalTime;
     int runningTime;
     int priority;
+    int memsize;
     FILE *process = fopen("input test.txt", "r");
     if (process == NULL)
     {
@@ -89,12 +91,12 @@ void read_data_from_file()
         else
         {
             id = atoi(ignoredCharacter);
-            if (fscanf(process, "%d %d %d", &arrivalTime, &runningTime, &priority) != 3)
+            if (fscanf(process, "%d %d %d %d", &arrivalTime, &runningTime, &priority, &memsize) != 4)
             {
                 printf("Error reading input file\n");
                 exit(1);
             }
-            setPCB(&processToBeSent, id, arrivalTime, runningTime, priority);
+            setPCB(&processToBeSent, id, arrivalTime, runningTime, priority, memsize);
             // printf("id %d, Arr time %d, Running time %d, Priority %d \n", processToBeSent.id, processToBeSent.ArrTime, processToBeSent.RunTime, processToBeSent.Priority);
             AddAccordingToArrivalTime(&que, processToBeSent);
             count++;
@@ -136,7 +138,6 @@ void get_num_algo()
     printf("Choose the prefered Algorithm....\n");
     printf("1) HPF. 2) SRTN. 3) RR. \n");
     scanf("%d", &Algo);
-
     while (!(Algo == 1 || Algo == 2 || Algo == 3))
     {
         printf("Choose A valid Number.\n");
@@ -147,6 +148,14 @@ void get_num_algo()
         printf("Enter the slice time:\n");
         scanf("%d", &time_quantum);
     }
+    printf("Choose the preferred memory allocation policy\n");
+    printf("1) First Fit. 2) Buddy memory allocation\n");
+    scanf("%d", &memPol);
+    while(!(memPol == 1 || memPol == 2)){
+        printf("Choose a valid number.\n");
+        scanf("%d", &memPol);
+    }
+
 }
 
 void Start_the_CLK_and_scheduler()
@@ -170,11 +179,13 @@ void Start_the_CLK_and_scheduler()
                 char cSendTime_quantum[10];
                 char parentID[10];
                 char Pcount[10];
+                char cSendMemPol[10];
                 sprintf(cSendAlgo, "%d", Algo);
                 sprintf(cSendTime_quantum, "%d", time_quantum);
                 sprintf(parentID, "%d", getppid());
                 sprintf(Pcount, "%d", count);
-                char *argv[] = {"./scheduler.out", cSendAlgo, cSendTime_quantum, parentID, Pcount, 0};
+                sprintf(cSendMemPol, "%d", memPol);
+                char *argv[] = {"./scheduler.out", cSendAlgo, cSendTime_quantum, parentID, Pcount, cSendMemPol, 0};
                 execv(argv[0], argv);
             }
             // pray for not reaching here

@@ -1,0 +1,16 @@
+At time 1 allocated 50 bytes for process 1 from 0 to 63
+At time 6 freed 50 bytes from process 1 from 0 to 63
+At time 6 allocated 55 bytes for process 4 from 0 to 63
+At time 7 freed 55 bytes from process 4 from 0 to 63
+At time 7 allocated 124 bytes for process 8 from 0 to 127
+At time 8 freed 124 bytes from process 8 from 0 to 127
+At time 8 allocated 51 bytes for process 3 from 0 to 63
+At time 9 freed 51 bytes from process 3 from 0 to 63
+At time 9 allocated 52 bytes for process 5 from 0 to 63
+At time 10 freed 52 bytes from process 5 from 0 to 63
+At time 10 allocated 80 bytes for process 6 from 0 to 127
+At time 11 freed 80 bytes from process 6 from 0 to 127
+At time 11 allocated 100 bytes for process 7 from 0 to 127
+At time 13 freed 100 bytes from process 7 from 0 to 127
+At time 13 allocated 51 bytes for process 2 from 0 to 63
+At time 16 freed 51 bytes from process 2 from 0 to 63

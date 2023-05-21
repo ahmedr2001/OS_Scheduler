@@ -25,20 +25,30 @@ struct PCB{
     int endTime;
     double WTA; // weighted tur arround time
     int PID; // pid of the actual created process
+    int memsize;
+    int mem_st_idx;
+    int mem_end_idx;
 };
 
 // sets the main prameters of the pcb
 //  at the initialinzation the pcb hasn't arrived  
-void setPCB(struct PCB* pcb, int ID, int ARR, int RUN, int Pr)
+void setPCB(struct PCB* pcb, int ID, int ARR, int RUN, int Pr, int mem)
 {
     pcb->id = ID;
     pcb->ArrTime = ARR;
     pcb->RunTime = RUN;
     pcb->RemainingTime = pcb->RunTime;
     pcb->Priority = Pr;
+    pcb->memsize = mem;
     pcb->RemainingTime = RUN;
     pcb->state = NotStarted;
     pcb->WaitTime = 0;
+}
+
+void setMemIdx(struct PCB *pcb, int st_idx, int end_idx)
+{
+    pcb->mem_st_idx = st_idx;
+    pcb->mem_end_idx = end_idx;
 }
 
 //sets the value of a pcb by the value of another pcb
@@ -56,6 +66,9 @@ void CopyPCB(struct PCB* pcb,struct PCB other)
     pcb->startTime=other.startTime;
     pcb->endTime=other.endTime;
     pcb->RemainingTime=other.RemainingTime;
+    pcb->memsize = other.memsize;
+    pcb->mem_st_idx = other.mem_st_idx;
+    pcb->mem_end_idx = other.mem_end_idx;
 }
 
 // sets the state
