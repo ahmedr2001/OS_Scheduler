@@ -1,6 +1,6 @@
 # OS Scheduler Simulation
 
-A simple simulation of an OS scheduler using different scheduling algorithms including: Highest Prioirty First (non-preemptive), Shortest Remaining Time Next and Round Robin. It also allocates memory using the First-Fit algorithm or the Buddy System Allocation algorithm.
+A simple simulation of an OS scheduler using different scheduling algorithms including: Highest Priority First (non-preemptive), Shortest Remaining Time Next and Round Robin. It also allocates memory using the First-Fit algorithm or the Buddy System Allocation algorithm.
 
 ## How To Run
 - Type `make build` to make the required files
